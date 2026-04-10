@@ -72,10 +72,22 @@ async function fetchAllPages(cp, sid, endpoint, extraBody = {}) {
   return all;
 }
 
-/** Normalise a raw CP rule object into the format the dashboard expects. */
-function normaliseRule(rule) {
-  const names = arr => (arr || []).map(o => (o && o.name) ? o.name : String(o)).join(', ');
-  const action = rule.action?.name || rule.action || '';
+/** Normalise a raw CP rule object into the format the dashboard expects.
+ *  objDict: Map<uid, {name, ...}> built from objects-dictionary responses. */
+function normaliseRule(rule, objDict = new Map()) {
+  // Resolve a single value: may be a full object {name,uid}, a plain UID string,
+  // or a primitive. Returns the human-readable name.
+  const resolve = val => {
+    if (!val) return '';
+    if (typeof val === 'object' && val.name) return val.name;     // already full object
+    if (typeof val === 'string') {
+      const hit = objDict.get(val);
+      return hit ? (hit.name || val) : val;                       // lookup uid → name
+    }
+    return String(val);
+  };
+  const names = arr => (arr || []).map(resolve).filter(Boolean).join(', ');
+  const action = resolve(rule.action);
   return {
     name:     rule.name      || `rule-${rule['rule-number'] || rule.uid}`,
     enabled:  rule.enabled !== false ? 'Yes' : 'No',
@@ -180,6 +192,7 @@ app.post('/api/cp/rules', async (req, res) => {
   let offset    = 0;
   let total     = Infinity;
   const allRaw  = [];
+  const objDict = new Map();   // uid → object, accumulated across all pages
 
   try {
     while (offset < total) {
@@ -190,13 +203,19 @@ app.post('/api/cp/rules', async (req, res) => {
       );
       const d = resp.data;
       total   = d.total ?? (d.rulebase?.length || 0);
+
+      // Accumulate the objects-dictionary returned alongside each page
+      for (const obj of (d['objects-dictionary'] || [])) {
+        if (obj.uid) objDict.set(obj.uid, obj);
+      }
+
       const flat = flattenRulebase(d.rulebase || []);
       allRaw.push(...flat);
       offset += LIMIT;
       if (!d.rulebase?.length || allRaw.length >= total) break;
     }
 
-    const rules = allRaw.map(normaliseRule);
+    const rules = allRaw.map(r => normaliseRule(r, objDict));
     res.json({ total: rules.length, rules });
   } catch (err) {
     const msg  = err.response?.data?.message || err.message;
