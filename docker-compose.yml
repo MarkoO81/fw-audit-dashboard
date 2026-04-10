@@ -1,0 +1,13 @@
+services:
+  fw-audit:
+    build: .
+    image: fw-audit-dashboard
+    container_name: fw-audit
+    ports:
+      - "3737:3737"
+    restart: unless-stopped
+    environment:
+      - PORT=3737
+    # Needed so the container can reach your Check Point management server
+    # on the same network. Remove if running on the same host/VLAN already.
+    network_mode: host

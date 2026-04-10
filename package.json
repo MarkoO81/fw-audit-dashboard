@@ -1,0 +1,13 @@
+{
+  "name": "fw-audit-dashboard",
+  "version": "1.0.0",
+  "description": "Firewall Audit Dashboard with Check Point Management API integration",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "express": "^4.19.0"
+  }
+}
