@@ -39,14 +39,19 @@ function cpClient(server, port) {
   });
 }
 
-/** Recursively flatten access-sections so every leaf is an access-rule. */
+/** Iteratively flatten access-sections so every leaf is an access-rule.
+ *  Uses an explicit stack to avoid call-stack overflow on deep rulebases. */
 function flattenRulebase(items = []) {
   const out = [];
-  for (const item of items) {
+  const stack = [...items];
+  while (stack.length) {
+    const item = stack.pop();
     if (item.type === 'access-section') {
-      out.push(...flattenRulebase(item.rulebase || []));
+      const children = item.rulebase || [];
+      // push in reverse so original order is preserved
+      for (let i = children.length - 1; i >= 0; i--) stack.push(children[i]);
     } else {
-      out.push(item);   // access-rule (or anything else)
+      out.push(item);
     }
   }
   return out;
