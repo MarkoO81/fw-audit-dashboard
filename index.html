@@ -190,50 +190,64 @@
   .pagination span{color:var(--text-dim);font-size:12px;}
 
   /* ── Gateway grid ── */
-  .gw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:16px;margin-bottom:6px;}
-  .gw-card{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:18px 14px;
+  .gw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:6px;}
+  .gw-card{background:var(--surface);border:2px solid var(--border);border-radius:12px;padding:18px 12px;
     text-align:center;cursor:pointer;transition:border-color .2s,transform .15s,box-shadow .2s;
-    display:flex;flex-direction:column;align-items:center;gap:8px;}
-  .gw-card:hover{border-color:var(--accent);transform:translateY(-2px);box-shadow:0 4px 24px rgba(108,123,255,.18);}
+    display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;}
+  .gw-card:hover{border-color:var(--accent);transform:translateY(-3px);box-shadow:0 6px 28px rgba(108,123,255,.2);}
   .gw-card.active{border-color:var(--accent);background:rgba(108,123,255,.07);box-shadow:0 0 0 3px rgba(108,123,255,.18);}
   .gw-icon-wrap{position:relative;width:72px;height:72px;}
-  /* animated shield SVG */
   .gw-pulse{animation:gwPulse 2.5s ease-in-out infinite;}
   @keyframes gwPulse{0%,100%{opacity:.6;transform:scale(.96);}50%{opacity:1;transform:scale(1.04);}}
   .gw-flame{animation:gwFlame 1.2s ease-in-out infinite alternate;}
   @keyframes gwFlame{from{transform:scaleY(.92) translateY(1px);}to{transform:scaleY(1.08) translateY(-1px);}}
   .gw-name{font-size:12px;font-weight:700;color:var(--text);word-break:break-all;line-height:1.3;}
   .gw-ip  {font-size:10px;color:var(--text-dim);font-family:monospace;}
-  .gw-type{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);}
-  .gw-type.cluster{background:rgba(108,123,255,.15);color:var(--accent);border-color:var(--accent);}
+  .gw-type-badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);}
+  .gw-type-badge.cluster{background:rgba(108,123,255,.15);color:var(--accent);border-color:var(--accent);}
+  .gw-expand-hint{font-size:9px;color:var(--text-dim);margin-top:2px;}
   /* expand panel */
   .topo-expand{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:16px;display:none;}
-  .topo-expand.open{display:block;animation:fadeIn .2s;}
-  @keyframes fadeIn{from{opacity:0;transform:translateY(-6px);}to{opacity:1;transform:none;}}
-
-  /* ── Topology ── */
-  .topo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
-  .topo-toolbar select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:13px;outline:none;}
-  .topo-toolbar select:focus{border-color:var(--accent);}
-  .topo-canvas-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;}
-  #topo-svg{width:100%;display:block;cursor:grab;}
-  #topo-svg:active{cursor:grabbing;}
+  .topo-expand.open{display:block;animation:fadeIn .25s;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:none;}}
+  /* options bar */
+  .topo-options{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px 14px;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;}
+  .topo-options label{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text-dim);cursor:pointer;user-select:none;}
+  .topo-options input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer;}
+  .topo-options select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;outline:none;}
+  .topo-opt-sep{width:1px;height:20px;background:var(--border);margin:0 4px;}
+  .view-btn{padding:4px 12px;font-size:11px;font-weight:600;border-radius:5px;cursor:pointer;border:1px solid var(--border);
+    background:var(--surface2);color:var(--text-dim);transition:all .15s;}
+  .view-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+  /* canvas */
+  .topo-canvas-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;user-select:none;}
+  .topo-canvas-wrap canvas{display:block;width:100%;cursor:grab;}
+  .topo-canvas-wrap canvas:active{cursor:grabbing;}
+  /* legend */
   .topo-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text-dim);}
   .topo-legend span{display:flex;align-items:center;gap:5px;}
   .topo-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;}
-  .topo-tooltip{position:fixed;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:280px;line-height:1.6;}
-  .topo-tooltip strong{display:block;margin-bottom:4px;color:var(--text);}
+  /* tooltip */
+  .topo-tooltip{position:fixed;background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+    padding:10px 14px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .12s;z-index:200;max-width:300px;line-height:1.7;}
+  .topo-tooltip strong{display:block;margin-bottom:4px;color:var(--text);font-size:13px;}
+  /* empty */
   .topo-empty{padding:60px;text-align:center;color:var(--text-dim);}
-  .iface-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;}
+  /* iface table */
+  .iface-table{width:100%;border-collapse:collapse;font-size:12px;}
   .iface-table th{background:var(--surface2);color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);}
   .iface-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
   .iface-table tr:last-child td{border-bottom:none;}
-  .iface-table tr:hover td{background:var(--surface2);}
+  .iface-table tr:hover td{background:rgba(108,123,255,.05);}
   .topo-type{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;}
   .topo-type.external{background:rgba(255,77,77,.15);color:var(--critical);}
   .topo-type.internal{background:rgba(77,255,145,.12);color:var(--ok);}
   .topo-type.dmz     {background:rgba(245,200,66,.15);color:var(--medium);}
   .topo-type.unknown {background:var(--surface);color:var(--text-dim);}
+  /* subnet chips */
+  .subnet-chip{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-family:monospace;
+    background:var(--surface2);border:1px solid var(--border);color:var(--text-dim);margin:1px;}
 
   /* Progress */
   .progress-wrap{background:var(--surface2);border-radius:999px;height:6px;overflow:hidden;margin:10px 0;}
@@ -394,7 +408,27 @@
         <button class="sec" id="btn-load-topo" onclick="loadTopology()">Load Gateways</button>
       </div>
       <div id="topo-gw-grid"></div>
-      <div class="topo-expand" id="topo-expand"></div>
+      <div class="topo-expand" id="topo-expand">
+        <div class="topo-options" id="topo-options" style="display:none">
+          <button class="view-btn active" id="vbtn-single" onclick="setView('single')">Single GW</button>
+          <button class="view-btn" id="vbtn-multi" onclick="setView('multi')">All GWs</button>
+          <div class="topo-opt-sep"></div>
+          <label><input type="checkbox" id="opt-labels" checked onchange="redrawTopo()"> Labels</label>
+          <label><input type="checkbox" id="opt-zones" checked onchange="redrawTopo()"> Zones</label>
+          <label><input type="checkbox" id="opt-subnets" checked onchange="redrawTopo()"> Subnets</label>
+          <label><input type="checkbox" id="opt-anim" checked onchange="toggleAnim()"> Traffic flow</label>
+          <div class="topo-opt-sep"></div>
+          <label>Speed:
+            <select id="opt-speed" onchange="redrawTopo()">
+              <option value="slow">Slow</option>
+              <option value="normal" selected>Normal</option>
+              <option value="fast">Fast</option>
+            </select>
+          </label>
+          <button class="view-btn" onclick="resetTopoView()" style="margin-left:auto">Reset View</button>
+        </div>
+        <div id="topo-canvas-container"></div>
+      </div>
       <div class="topo-tooltip" id="topo-tt"></div>
     </section>
 
@@ -1026,13 +1060,7 @@ function loadSample() {
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 // ════════════════════════════════════════════════════════════════
-// TOPOLOGY
-// ════════════════════════════════════════════════════════════════
-let topoGateways = [];
-let topoData     = null;   // currently rendered gateway topology
-
-// ════════════════════════════════════════════════════════════════
-// TOPOLOGY — Gateway grid + click-to-expand
+// TOPOLOGY — Canvas-based, full-featured
 // ════════════════════════════════════════════════════════════════
 const TOPO_COLOR = {
   external:{ fill:'rgba(255,77,77,.18)',  stroke:'#ff4d4d', text:'#ff4d4d', label:'External' },
@@ -1304,34 +1332,521 @@ function renderTopoDiagram(gw, container) {
   initTopoInteraction(container.querySelector(`#topo-svg-${uid}`));
 }
 
-// ── Tooltip ───────────────────────────────────────────────────
-function showTopoTip(e, idx) {
-  const n = _topoNodes[idx]; if (!n) return;
-  const f = n.iface;
-  const tt = document.getElementById('topo-tt');
-  tt.innerHTML = `<strong>${esc(f.name)}</strong>
-    ${f.cidr?`<div>IP: <code>${esc(f.cidr)}</code></div>`:''}
-    <div>Topology: <span class="topo-type ${esc(f.topology)}">${esc(f.topology||'unknown')}</span></div>
-    <div>Zone: <strong>${esc(f.zone)}</strong></div>
-    <div>Anti-Spoofing: <strong style="color:${f.antiSpoofing?'var(--ok)':'var(--critical)'}">${f.antiSpoofing?'✓ Enabled':'✗ Disabled'}</strong></div>
-    ${f.networks.length?`<div>Networks: ${esc(f.networks.join(', '))}</div>`:''}`;
-  tt.style.opacity='1';
-  tt.style.left=(e.clientX+14)+'px';
-  tt.style.top=(e.clientY-10)+'px';
-}
-function hideTopoTip(){
-  const tt=document.getElementById('topo-tt');
-  if(tt) tt.style.opacity='0';
+// ────────────────────────────────────────────────────────────────
+// Canvas topology engine
+// ────────────────────────────────────────────────────────────────
+const TC = {
+  external:{ fill:'rgba(255,77,77,.22)',  stroke:'#ff4d4d', label:'External', text:'#ff4d4d'  },
+  internal:{ fill:'rgba(77,255,145,.18)', stroke:'#4dff91', label:'Internal', text:'#4dff91'  },
+  dmz:     { fill:'rgba(245,200,66,.22)', stroke:'#f5c842', label:'DMZ',      text:'#f5c842'  },
+  unknown: { fill:'rgba(122,127,154,.18)',stroke:'#7a7f9a', label:'Unknown',  text:'#7a7f9a'  },
+};
+const tc = t => TC[t] || TC.unknown;
+
+// Engine state
+let _canvas, _ctx, _animId, _animOn=true;
+let _camX=0, _camY=0, _camScale=1;
+let _drag=false, _dragSX=0, _dragSY=0, _dragNode=null;
+let _nodes=[], _packets=[], _gwList=[], _currentView='single';
+let _hoveredNode=null;
+const SPEEDS = { slow:0.6, normal:1.2, fast:2.4 };
+
+function opt(id){ return document.getElementById(id)?.checked ?? true; }
+function speed(){ return SPEEDS[document.getElementById('opt-speed')?.value || 'normal']; }
+
+// ── Layout ────────────────────────────────────────────────────
+function buildNodes(gwDataArray) {
+  _nodes = [];
+  const W = _canvas.width, H = _canvas.height;
+
+  if (_currentView === 'multi') {
+    // All gateways arranged in a row, each with its interfaces
+    const GW_SEP = Math.max(280, W / gwDataArray.length);
+    gwDataArray.forEach((gw, gi) => {
+      const cx = GW_SEP * gi + GW_SEP / 2;
+      const cy = H / 2;
+      _nodes.push({ kind:'gw', gw, x:cx, y:cy, r:40, draggable:true, label:gw.name, ip:gw.ipv4||'' });
+      // internet node for external ifaces
+      const extIfaces = (gw.interfaces||[]).filter(f=>f.topology==='external');
+      if (extIfaces.length) {
+        _nodes.push({ kind:'internet', x:cx, y:cy-180, r:32, label:'Internet', gw, draggable:true });
+      }
+      layoutInterfaces(gw, cx, cy, gi * 1000);
+    });
+  } else {
+    // Single GW: centered, interfaces fan out
+    const gw = gwDataArray[0]; if (!gw) return;
+    const cx = W/2, cy = H/2;
+    _nodes.push({ kind:'gw', gw, x:cx, y:cy, r:46, draggable:true, label:gw.name, ip:gw.ipv4||'' });
+    const extIfaces = (gw.interfaces||[]).filter(f=>f.topology==='external');
+    if (extIfaces.length) {
+      _nodes.push({ kind:'internet', x:cx, y:cy-220, r:36, label:'Internet', gw, draggable:true });
+    }
+    layoutInterfaces(gw, cx, cy, 0);
+  }
 }
 
-// ── Pan/zoom ──────────────────────────────────────────────────
-function initTopoInteraction(svg) {
-  let sc=1,tx=0,ty=0,drag=false,sx=0,sy=0;
-  const ap=()=>svg.style.transform=`translate(${tx}px,${ty}px) scale(${sc})`;
-  svg.addEventListener('wheel',e=>{e.preventDefault();sc=Math.min(3,Math.max(.4,sc*(e.deltaY<0?1.1:.91)));ap();},{passive:false});
-  svg.addEventListener('mousedown',e=>{drag=true;sx=e.clientX-tx;sy=e.clientY-ty;});
-  window.addEventListener('mousemove',e=>{if(!drag)return;tx=e.clientX-sx;ty=e.clientY-sy;ap();});
-  window.addEventListener('mouseup',()=>drag=false);
+function layoutInterfaces(gw, cx, cy, baseId) {
+  const ifaces = gw.interfaces || [];
+  if (!ifaces.length) return;
+  const groups = {};
+  for (const f of ifaces) { const t=f.topology||'unknown'; (groups[t]||(groups[t]=[])).push(f); }
+  const keys = Object.keys(groups);
+  const ARM = _currentView==='multi' ? 120 : 165;
+  const ZONE_D = ARM + 70;
+  const astep = (2*Math.PI) / keys.length;
+  const fanSpan = Math.min(0.45, 0.7/Math.max(...keys.map(k=>groups[k].length)));
+
+  keys.forEach((type, gi) => {
+    const ga = gi*astep - Math.PI/2;
+    const grp = groups[type];
+    // zone bubble
+    _nodes.push({ kind:'zone', type, x:cx+Math.cos(ga)*ZONE_D, y:cy+Math.sin(ga)*ZONE_D,
+      r:_currentView==='multi'?55:68, label:(type[0]||'').toUpperCase()+type.slice(1), gw, draggable:false });
+    // subnet nodes
+    const subnetsSeen = new Set();
+    grp.forEach((iface, ii) => {
+      const off = grp.length>1 ? (ii-(grp.length-1)/2)*fanSpan : 0;
+      const angle = ga+off;
+      const x = cx+Math.cos(angle)*ARM, y = cy+Math.sin(angle)*ARM;
+      const id = baseId + _nodes.length;
+      _nodes.push({ kind:'iface', iface, x, y, r:_currentView==='multi'?26:32,
+        draggable:true, label:iface.name, ip:iface.cidr||iface.ipv4||'', type, gw, id });
+      // subnet nodes behind this interface
+      if (opt('opt-subnets')) {
+        iface.networks.filter(n=>n&&!subnetsSeen.has(n)).forEach((net, ni) => {
+          subnetsSeen.add(net);
+          const sd = ARM + (_currentView==='multi'?75:95);
+          const sangle = angle + (ni-((iface.networks.length-1)/2))*0.18;
+          _nodes.push({ kind:'subnet', net, x:cx+Math.cos(sangle)*sd, y:cy+Math.sin(sangle)*sd,
+            r:20, label:net, parentId:id, type, gw, draggable:true });
+        });
+      }
+    });
+  });
+}
+
+// ── Packets ───────────────────────────────────────────────────
+function spawnPackets() {
+  _packets = [];
+  const gwNodes = _nodes.filter(n=>n.kind==='gw');
+  const ifaceNodes = _nodes.filter(n=>n.kind==='iface');
+  if (!gwNodes.length || !ifaceNodes.length) return;
+  gwNodes.forEach(gw => {
+    const myIfaces = ifaceNodes.filter(n=>n.gw===gw.gw);
+    myIfaces.forEach(iface => {
+      const isExt = iface.type==='external';
+      // inbound (internet → iface → gw) for external, outbound (gw → iface) for internal
+      const inet = _nodes.find(n=>n.kind==='internet'&&n.gw===gw.gw);
+      for (let i=0;i<(isExt?2:1);i++) {
+        _packets.push({
+          from: isExt ? (inet||gw) : gw,
+          to:   isExt ? iface : iface,
+          via:  isExt ? iface : null,
+          t: Math.random(), color: tc(iface.type).stroke, speed: speed()*(0.7+Math.random()*0.6),
+          size: 3+Math.random()*2
+        });
+      }
+    });
+  });
+}
+
+// ── Draw ──────────────────────────────────────────────────────
+function draw() {
+  if (!_ctx) return;
+  const W=_canvas.width, H=_canvas.height;
+  _ctx.clearRect(0,0,W,H);
+  _ctx.save();
+  _ctx.translate(_camX,_camY);
+  _ctx.scale(_camScale,_camScale);
+
+  drawGrid();
+  drawEdges();
+  if (_animOn) drawPackets();
+  drawNodes();
+  drawLabels();
+
+  _ctx.restore();
+}
+
+function drawGrid() {
+  const step=40, W=_canvas.width/_camScale, H=_canvas.height/_camScale;
+  const ox=-_camX/_camScale, oy=-_camY/_camScale;
+  _ctx.strokeStyle='rgba(46,50,80,0.4)'; _ctx.lineWidth=0.5;
+  for(let x=Math.floor(ox/step)*step;x<ox+W;x+=step){
+    _ctx.beginPath();_ctx.moveTo(x,oy);_ctx.lineTo(x,oy+H);_ctx.stroke();
+  }
+  for(let y=Math.floor(oy/step)*step;y<oy+H;y+=step){
+    _ctx.beginPath();_ctx.moveTo(ox,y);_ctx.lineTo(ox+W,y);_ctx.stroke();
+  }
+}
+
+function drawEdges() {
+  const gwNodes    = _nodes.filter(n=>n.kind==='gw');
+  const ifaceNodes = _nodes.filter(n=>n.kind==='iface');
+  const inetNodes  = _nodes.filter(n=>n.kind==='internet');
+  const subNodes   = _nodes.filter(n=>n.kind==='subnet');
+
+  // GW → iface
+  gwNodes.forEach(gw => {
+    ifaceNodes.filter(n=>n.gw===gw.gw).forEach(iface => {
+      drawEdge(gw, iface, tc(iface.type).stroke, 0.5);
+    });
+    // GW → internet (for external ifaces)
+    inetNodes.filter(n=>n.gw===gw.gw).forEach(inet => {
+      const extIface = ifaceNodes.find(n=>n.gw===gw.gw&&n.type==='external');
+      if (extIface) { drawEdge(inet, extIface, TC.external.stroke, 0.4, true); }
+    });
+  });
+  // iface → subnet
+  subNodes.forEach(s => {
+    const parent = _nodes.find(n=>n.id===s.parentId);
+    if (parent) drawEdge(parent, s, tc(s.type).stroke, 0.35, false, true);
+  });
+}
+
+function drawEdge(a, b, color, alpha=0.6, dashed=false, thin=false) {
+  _ctx.save();
+  _ctx.globalAlpha = alpha;
+  _ctx.strokeStyle = color;
+  _ctx.lineWidth = thin ? 1 : 1.8;
+  if (dashed) _ctx.setLineDash([5,4]);
+  _ctx.beginPath(); _ctx.moveTo(a.x,a.y); _ctx.lineTo(b.x,b.y); _ctx.stroke();
+  // arrowhead
+  if (!thin) {
+    const ang = Math.atan2(b.y-a.y,b.x-a.x);
+    const tip = { x:b.x-Math.cos(ang)*b.r, y:b.y-Math.sin(ang)*b.r };
+    _ctx.beginPath();
+    _ctx.moveTo(tip.x,tip.y);
+    _ctx.lineTo(tip.x-10*Math.cos(ang-0.4),tip.y-10*Math.sin(ang-0.4));
+    _ctx.lineTo(tip.x-10*Math.cos(ang+0.4),tip.y-10*Math.sin(ang+0.4));
+    _ctx.closePath(); _ctx.fillStyle=color; _ctx.fill();
+  }
+  _ctx.restore();
+}
+
+function drawPackets() {
+  _packets.forEach(p => {
+    const t = p.t % 1;
+    const x = p.from.x + (p.to.x-p.from.x)*t;
+    const y = p.from.y + (p.to.y-p.from.y)*t;
+    _ctx.save();
+    _ctx.globalAlpha = 0.85;
+    _ctx.shadowColor = p.color; _ctx.shadowBlur = 8;
+    _ctx.beginPath(); _ctx.arc(x,y,p.size,0,Math.PI*2);
+    _ctx.fillStyle = p.color; _ctx.fill();
+    _ctx.restore();
+  });
+}
+
+function drawNodes() {
+  [..._nodes].reverse().forEach(n => {
+    const hov = n===_hoveredNode;
+    _ctx.save();
+    switch(n.kind) {
+      case 'gw':       drawGwNode(n, hov); break;
+      case 'internet': drawInternetNode(n, hov); break;
+      case 'iface':    drawIfaceNode(n, hov); break;
+      case 'zone':     drawZoneNode(n); break;
+      case 'subnet':   drawSubnetNode(n, hov); break;
+    }
+    _ctx.restore();
+  });
+}
+
+function drawGwNode(n, hov) {
+  const r=n.r;
+  // glow
+  _ctx.shadowColor='#6c7bff'; _ctx.shadowBlur=hov?28:14;
+  // circle
+  _ctx.beginPath(); _ctx.arc(n.x,n.y,r,0,Math.PI*2);
+  const g=_ctx.createRadialGradient(n.x,n.y-r*.3,2,n.x,n.y,r);
+  g.addColorStop(0,'#2e3470'); g.addColorStop(1,'#1a1d27');
+  _ctx.fillStyle=g; _ctx.fill();
+  _ctx.strokeStyle=hov?'#a78bfa':'#6c7bff'; _ctx.lineWidth=hov?3:2.5; _ctx.stroke();
+  // shield icon
+  const s=r*.55, px=n.x-s*.5, py=n.y-s*.65;
+  _ctx.strokeStyle='#6c7bff'; _ctx.lineWidth=1.6; _ctx.shadowBlur=0;
+  _ctx.beginPath();
+  _ctx.moveTo(n.x,py); _ctx.lineTo(n.x+s*.5,py+s*.25);
+  _ctx.lineTo(n.x+s*.5,py+s*.65); _ctx.bezierCurveTo(n.x+s*.5,py+s,n.x,py+s*1.1,n.x,py+s*1.1);
+  _ctx.bezierCurveTo(n.x,py+s*1.1,n.x-s*.5,py+s,n.x-s*.5,py+s*.65);
+  _ctx.lineTo(n.x-s*.5,py+s*.25); _ctx.closePath(); _ctx.stroke();
+  // network dot
+  _ctx.fillStyle='#6c7bff'; _ctx.beginPath(); _ctx.arc(n.x,n.y+r*.1,3,0,Math.PI*2); _ctx.fill();
+}
+
+function drawInternetNode(n, hov) {
+  const r=n.r;
+  _ctx.shadowColor='#4da6ff'; _ctx.shadowBlur=hov?22:10;
+  _ctx.beginPath(); _ctx.arc(n.x,n.y,r,0,Math.PI*2);
+  const g=_ctx.createRadialGradient(n.x,n.y-r*.3,2,n.x,n.y,r);
+  g.addColorStop(0,'rgba(77,166,255,.3)'); g.addColorStop(1,'rgba(10,14,24,.8)');
+  _ctx.fillStyle=g; _ctx.fill();
+  _ctx.strokeStyle=hov?'#7ac4ff':'#4da6ff'; _ctx.lineWidth=2; _ctx.stroke();
+  // cloud arcs
+  _ctx.strokeStyle='#4da6ff'; _ctx.lineWidth=1.4; _ctx.shadowBlur=0;
+  const cr=r*.32;
+  [[-.28,-.05],[0,-.18],[.28,-.05]].forEach(([dx,dy])=>{
+    _ctx.beginPath(); _ctx.arc(n.x+dx*r,n.y+dy*r,cr,Math.PI,2*Math.PI); _ctx.stroke();
+  });
+  _ctx.beginPath(); _ctx.moveTo(n.x-r*.56,n.y+.01*r); _ctx.lineTo(n.x+r*.56,n.y+.01*r); _ctx.stroke();
+  // globe lines
+  _ctx.setLineDash([2,3]);
+  _ctx.beginPath(); _ctx.ellipse(n.x,n.y,r*.55,r*.28,0,0,Math.PI*2); _ctx.stroke();
+  _ctx.setLineDash([]);
+}
+
+function drawIfaceNode(n, hov) {
+  const col=tc(n.type), r=n.r;
+  _ctx.shadowColor=col.stroke; _ctx.shadowBlur=hov?20:8;
+  _ctx.beginPath(); _ctx.arc(n.x,n.y,r,0,Math.PI*2);
+  const g=_ctx.createRadialGradient(n.x,n.y,1,n.x,n.y,r);
+  g.addColorStop(0,col.fill.replace(/[^,]+\)$/,'0.45)')); g.addColorStop(1,col.fill);
+  _ctx.fillStyle=g; _ctx.fill();
+  _ctx.strokeStyle=col.stroke; _ctx.lineWidth=hov?2.5:2; _ctx.stroke();
+  // anti-spoof indicator ring
+  if (!n.iface.antiSpoofing) {
+    _ctx.strokeStyle='#ff4d4d'; _ctx.lineWidth=2; _ctx.setLineDash([3,3]);
+    _ctx.beginPath(); _ctx.arc(n.x,n.y,r+4,0,Math.PI*2); _ctx.stroke();
+    _ctx.setLineDash([]);
+  }
+}
+
+function drawZoneNode(n) {
+  if (!opt('opt-zones')) return;
+  const col=tc(n.type);
+  _ctx.globalAlpha=0.18;
+  _ctx.beginPath(); _ctx.arc(n.x,n.y,n.r,0,Math.PI*2);
+  _ctx.fillStyle=col.fill; _ctx.fill();
+  _ctx.globalAlpha=0.5;
+  _ctx.strokeStyle=col.stroke; _ctx.lineWidth=1.2; _ctx.setLineDash([5,4]);
+  _ctx.stroke(); _ctx.setLineDash([]);
+  _ctx.globalAlpha=1;
+}
+
+function drawSubnetNode(n, hov) {
+  const col=tc(n.type);
+  _ctx.shadowColor=col.stroke; _ctx.shadowBlur=hov?12:4;
+  _ctx.fillStyle=col.fill; _ctx.strokeStyle=col.stroke; _ctx.lineWidth=1;
+  const w=Math.max(60,n.label.length*6.5), h=18;
+  roundRect(_ctx,n.x-w/2,n.y-h/2,w,h,4);
+  _ctx.fill(); _ctx.stroke();
+}
+
+function drawLabels() {
+  if (!opt('opt-labels')) return;
+  _nodes.forEach(n => {
+    if (n.kind==='zone') return;
+    _ctx.save();
+    _ctx.textAlign='center'; _ctx.textBaseline='middle';
+    if (n.kind==='subnet') {
+      _ctx.font='bold 8px monospace'; _ctx.fillStyle='#a0a4c0';
+      _ctx.fillText(n.label,n.x,n.y);
+    } else if (n.kind==='iface') {
+      _ctx.font=`bold ${Math.max(8,n.r*.32)}px sans-serif`; _ctx.fillStyle=tc(n.type).text;
+      _ctx.fillText(n.label,n.x,n.y-4);
+      if (n.ip) { _ctx.font=`${Math.max(7,n.r*.24)}px monospace`; _ctx.fillStyle='#7a7f9a'; _ctx.fillText(n.ip,n.x,n.y+8); }
+      // AS badge
+      const asc=n.iface.antiSpoofing?'#4dff91':'#ff4d4d';
+      _ctx.font='bold 8px sans-serif'; _ctx.fillStyle=asc;
+      _ctx.fillText(n.iface.antiSpoofing?'✓AS':'✗AS',n.x,n.y+18);
+    } else if (n.kind==='gw') {
+      _ctx.font='bold 10px sans-serif'; _ctx.fillStyle='#e2e4f0';
+      _ctx.fillText(n.label.length>14?n.label.slice(0,13)+'…':n.label,n.x,n.y+n.r+12);
+      if (n.ip){ _ctx.font='9px monospace'; _ctx.fillStyle='#7a7f9a'; _ctx.fillText(n.ip,n.x,n.y+n.r+23); }
+    } else if (n.kind==='internet') {
+      _ctx.font='bold 9px sans-serif'; _ctx.fillStyle='#4da6ff';
+      _ctx.fillText('INTERNET',n.x,n.y+n.r+12);
+    } else if (n.kind==='zone' && opt('opt-zones')) {
+      _ctx.font='bold 9px sans-serif'; _ctx.fillStyle=tc(n.type).text;
+      _ctx.fillText(n.label.toUpperCase(),n.x,n.y-n.r+10);
+    }
+    _ctx.restore();
+  });
+
+  // zone labels separately (drawn on top of zone circles)
+  _nodes.filter(n=>n.kind==='zone'&&opt('opt-zones')).forEach(n=>{
+    _ctx.save(); _ctx.textAlign='center'; _ctx.textBaseline='middle';
+    _ctx.font='bold 9px sans-serif'; _ctx.fillStyle=tc(n.type).text; _ctx.globalAlpha=0.85;
+    _ctx.fillText(n.label.toUpperCase(),n.x,n.y-n.r+11);
+    _ctx.restore();
+  });
+}
+
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath(); ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+// ── Animation loop ────────────────────────────────────────────
+function animLoop() {
+  if (_animOn) {
+    const sp = speed();
+    _packets.forEach(p => { p.t += p.speed*sp*0.004; if(p.t>=1) p.t-=1; });
+  }
+  draw();
+  _animId = requestAnimationFrame(animLoop);
+}
+
+function toggleAnim(){
+  _animOn = document.getElementById('opt-anim')?.checked ?? true;
+  if (!_animOn) draw();
+}
+
+// ── Interaction ───────────────────────────────────────────────
+function canvasXY(e) {
+  const r=_canvas.getBoundingClientRect();
+  return { x:(e.clientX-r.left-_camX)/_camScale, y:(e.clientY-r.top-_camY)/_camScale };
+}
+function hitNode(mx,my){
+  return _nodes.find(n=>n.kind!=='zone'&&Math.hypot(n.x-mx,n.y-my)<n.r+6);
+}
+function initCanvasEvents() {
+  _canvas.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const f=e.deltaY<0?1.1:0.91;
+    const r=_canvas.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    _camX=(1-f)*mx+_camX*f; _camY=(1-f)*my+_camY*f;
+    _camScale=Math.min(4,Math.max(0.3,_camScale*f));
+  },{passive:false});
+  _canvas.addEventListener('mousedown',e=>{
+    const {x,y}=canvasXY(e);
+    _dragNode=hitNode(x,y)&&hitNode(x,y)?.draggable?hitNode(x,y):null;
+    if(!_dragNode){_drag=true;_dragSX=e.clientX-_camX;_dragSY=e.clientY-_camY;}
+  });
+  window.addEventListener('mousemove',e=>{
+    if(_dragNode){const {x,y}=canvasXY(e);_dragNode.x=x;_dragNode.y=y;return;}
+    if(_drag){_camX=e.clientX-_dragSX;_camY=e.clientY-_dragSY;return;}
+    const {x,y}=canvasXY(e);
+    const h=hitNode(x,y);
+    if(h!==_hoveredNode){_hoveredNode=h;_canvas.style.cursor=h?'pointer':'grab';}
+    if(h) showTopoTip(e,h); else hideTopoTip();
+  });
+  window.addEventListener('mouseup',()=>{_drag=false;_dragNode=null;});
+  // resize
+  new ResizeObserver(()=>resizeCanvas()).observe(_canvas.parentElement);
+}
+function resizeCanvas(){
+  if(!_canvas) return;
+  _canvas.width=_canvas.parentElement.clientWidth;
+  _canvas.height=Math.max(480,Math.round(_canvas.parentElement.clientWidth*.52));
+}
+
+// ── Tooltip ───────────────────────────────────────────────────
+function showTopoTip(e, node) {
+  const tt=document.getElementById('topo-tt'); if(!tt) return;
+  let html='';
+  if (node.kind==='iface') {
+    const f=node.iface;
+    html=`<strong>${esc(f.name)}</strong>
+      ${f.cidr?`<div>IP: <code>${esc(f.cidr)}</code></div>`:''}
+      <div>Topology: <span class="topo-type ${esc(f.topology)}">${esc(f.topology||'unknown')}</span></div>
+      <div>Zone: <strong>${esc(f.zone)}</strong></div>
+      <div>Anti-Spoofing: <strong style="color:${f.antiSpoofing?'var(--ok)':'var(--critical)'}">${f.antiSpoofing?'✓ Enabled':'✗ Disabled'}</strong></div>
+      ${f.networks.length?`<div>Subnets: ${f.networks.map(n=>`<span class="subnet-chip">${esc(n)}</span>`).join('')}</div>`:''}`;
+  } else if (node.kind==='gw') {
+    const g=node.gw;
+    html=`<strong>${esc(g.name)}</strong>
+      ${g.ipv4?`<div>IP: <code>${esc(g.ipv4)}</code></div>`:''}
+      ${g.version?`<div>OS: ${esc(g.version)}</div>`:''}
+      <div>Interfaces: ${(g.interfaces||[]).length}</div>`;
+  } else if (node.kind==='internet') {
+    html='<strong>Internet</strong><div>External connectivity</div>';
+  } else if (node.kind==='subnet') {
+    html=`<strong>${esc(node.net)}</strong><div>Network behind ${esc(node.gw?.name||'')}</div>`;
+  }
+  tt.innerHTML=html; tt.style.opacity='1';
+  tt.style.left=(e.clientX+16)+'px'; tt.style.top=(e.clientY-12)+'px';
+}
+function hideTopoTip(){ const tt=document.getElementById('topo-tt'); if(tt) tt.style.opacity='0'; }
+
+function resetTopoView(){
+  _camX=0; _camY=0; _camScale=1;
+}
+
+// ── View switch ───────────────────────────────────────────────
+function setView(v){
+  _currentView=v;
+  document.getElementById('vbtn-single')?.classList.toggle('active',v==='single');
+  document.getElementById('vbtn-multi')?.classList.toggle('active',v==='multi');
+  redrawTopo();
+}
+
+function redrawTopo(){
+  if (!_gwList.length) return;
+  const data = _currentView==='single' ? [_gwList[_activeGwIdx]] : _gwList;
+  buildNodes(data.filter(Boolean));
+  spawnPackets();
+}
+
+// ── Main entry ────────────────────────────────────────────────
+let _activeGwIdx=0;
+
+function renderTopoDiagram(gw, container) {
+  // Store in gwList at active index
+  _gwList[_activeGwIdx] = gw;
+
+  // Show options bar
+  document.getElementById('topo-options').style.display='flex';
+
+  // Build canvas if not present
+  let canvasWrap = document.getElementById('topo-canvas-container');
+  if (!canvasWrap._built) {
+    canvasWrap.innerHTML = `
+      <div class="topo-canvas-wrap" style="height:auto">
+        <canvas id="topo-canvas"></canvas>
+      </div>
+      <div class="topo-legend" id="topo-legend-box"></div>
+      <div id="topo-iface-table" style="margin-top:16px"></div>`;
+    _canvas = document.getElementById('topo-canvas');
+    _ctx = _canvas.getContext('2d');
+    resizeCanvas();
+    initCanvasEvents();
+    if (_animId) cancelAnimationFrame(_animId);
+    animLoop();
+    canvasWrap._built = true;
+  }
+
+  // Legend
+  const legend = Object.entries(TC).map(([t,c])=>
+    `<span><i style="background:${c.fill};border:1px solid ${c.stroke}"></i>${c.label}</span>`
+  ).join('') +
+    `<span><i style="background:rgba(77,255,145,.2);border:1px solid #4dff91"></i>✓ Anti-Spoofing</span>` +
+    `<span><i style="background:rgba(255,77,77,.2);border:1px solid #ff4d4d"></i>✗ No Anti-Spoof</span>` +
+    `<span><i style="background:rgba(77,166,255,.2);border:1px solid #4da6ff"></i>Internet/External</span>`;
+  document.getElementById('topo-legend-box').innerHTML = legend;
+
+  // Interface table
+  const ifaces = gw.interfaces || [];
+  document.getElementById('topo-iface-table').innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:12px;align-items:center">
+      <span style="font-size:14px;font-weight:700;color:var(--text)">${esc(gw.name)}</span>
+      ${gw.ipv4?`<span>IP: <strong style="color:var(--text)">${esc(gw.ipv4)}</strong></span>`:''}
+      ${gw.version?`<span>OS: <strong style="color:var(--text)">${esc(gw.version)}</strong></span>`:''}
+      ${gw.platform?`<span>HW: <strong style="color:var(--text)">${esc(gw.platform)}</strong></span>`:''}
+      ${gw.policy?`<span>Policy: <strong style="color:var(--text)">${esc(gw.policy)}</strong></span>`:''}
+      <span>Interfaces: <strong style="color:var(--text)">${ifaces.length}</strong></span>
+    </div>
+    <div class="table-wrap"><table class="iface-table"><thead><tr>
+      <th>Interface</th><th>IP / CIDR</th><th>Topology</th><th>Zone</th><th>Anti-Spoofing</th><th>Subnets Behind</th>
+    </tr></thead><tbody>${ifaces.map(f=>{
+      const col=tc(f.topology), as=f.antiSpoofing;
+      return `<tr>
+        <td style="font-weight:600">${esc(f.name)}</td>
+        <td style="font-family:monospace">${esc(f.cidr||f.ipv4||'—')}</td>
+        <td><span class="topo-type ${esc(f.topology)}">${esc(f.topology||'unknown')}</span></td>
+        <td style="color:${col.text}">${esc(f.zone)}</td>
+        <td style="color:${as?'var(--ok)':'var(--critical)'};font-weight:700">${as?'✓ Enabled':'✗ Disabled'}</td>
+        <td>${f.networks.map(n=>`<span class="subnet-chip">${esc(n)}</span>`).join('')||'—'}</td>
+      </tr>`;
+    }).join('')}</tbody></table></div>`;
+
+  redrawTopo();
 }
 </script>
 </body>
