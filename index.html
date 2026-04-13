@@ -985,7 +985,18 @@ async function loadTopology() {
     const res = await api('gateways', {});
     topoGateways = res.gateways || [];
     if (!topoGateways.length) {
-      wrap.innerHTML = '<div class="topo-empty">No gateways or clusters found. Check API permissions.</div>';
+      const hint = res.hint || 'No gateways found.';
+      const tried = res.tried ? `<div style="margin-top:8px;font-size:11px;color:var(--text-dim)">Tried: ${esc(res.tried.join(', '))}</div>` : '';
+      wrap.innerHTML = `<div class="topo-empty">
+        <div style="color:var(--medium);font-weight:600;margin-bottom:8px">No gateways or clusters found</div>
+        <div style="font-size:12px;color:var(--text-dim);max-width:500px;margin:0 auto;line-height:1.7">${esc(hint)}</div>
+        ${tried}
+        <div style="margin-top:16px;font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:left;max-width:500px;margin:16px auto 0">
+          <strong style="color:var(--text)">Fix in SmartConsole:</strong><br>
+          Manage &amp; Settings → Permissions &amp; Administrators → your profile →<br>
+          <strong style="color:var(--accent)">Gateways &amp; Servers → Read</strong>
+        </div>
+      </div>`;
       return;
     }
     renderGatewayPicker(topoGateways);

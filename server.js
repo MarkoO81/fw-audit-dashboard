@@ -260,26 +260,58 @@ app.post('/api/cp/domains', async (req, res) => {
 });
 
 /** POST /api/cp/gateways
- *  Returns all simple-gateway and simple-cluster objects with full detail.
+ *  Returns all gateway/cluster objects with full detail.
+ *  Tries multiple endpoints in order so it works across CP versions
+ *  and read-only permission profiles.
  */
 app.post('/api/cp/gateways', async (req, res) => {
   const { server, port = 443, sid } = req.body;
   const cp = cpClient(server, port);
+  const tried = [];
+
   try {
-    // fetch both gateways and clusters in parallel
+    // ── Strategy 1: dedicated simple-gateway / simple-cluster endpoints (R80.20+)
     const [gwResp, clResp] = await Promise.allSettled([
-      fetchAllPages(cp, sid, '/show-simple-gateways',  { 'details-level': 'full' }),
-      fetchAllPages(cp, sid, '/show-simple-clusters',   { 'details-level': 'full' }),
+      fetchAllPages(cp, sid, '/show-simple-gateways', { 'details-level': 'full' }),
+      fetchAllPages(cp, sid, '/show-simple-clusters',  { 'details-level': 'full' }),
     ]);
-    const gateways = [
+    tried.push('show-simple-gateways', 'show-simple-clusters');
+    const s1 = [
       ...(gwResp.status === 'fulfilled' ? gwResp.value : []),
       ...(clResp.status === 'fulfilled' ? clResp.value : []),
     ];
-    res.json({ gateways });
+    if (s1.length) return res.json({ gateways: s1, source: 'show-simple-gateways' });
+
+    // ── Strategy 2: show-gateways-and-servers (older API / broader permission)
+    tried.push('show-gateways-and-servers');
+    try {
+      const s2 = await fetchAllPages(cp, sid, '/show-gateways-and-servers', { 'details-level': 'full' });
+      if (s2.length) return res.json({ gateways: s2, source: 'show-gateways-and-servers' });
+    } catch (_) {}
+
+    // ── Strategy 3: show-objects filtered by type (works with any read permission)
+    tried.push('show-objects?type=simple-gateway');
+    const gwTypes = ['simple-gateway', 'simple-cluster', 'CpmiGatewayCluster', 'checkpoint-host'];
+    const s3 = [];
+    for (const type of gwTypes) {
+      try {
+        const objs = await fetchAllPages(cp, sid, '/show-objects', { type, 'details-level': 'full' });
+        s3.push(...objs);
+      } catch (_) {}
+    }
+    if (s3.length) return res.json({ gateways: s3, source: 'show-objects' });
+
+    // ── Nothing found — return empty with diagnostics
+    res.json({
+      gateways: [],
+      source: 'none',
+      tried,
+      hint: 'No gateways found. Ensure the audit user has "Gateways & Servers" Read permission in SmartConsole → Manage & Settings → Permissions & Administrators.',
+    });
   } catch (err) {
     const msg  = err.response?.data?.message || err.message;
     const code = err.response?.status        || 500;
-    res.status(code).json({ error: msg });
+    res.status(code).json({ error: msg, tried });
   }
 });
 
