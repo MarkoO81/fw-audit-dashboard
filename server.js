@@ -216,7 +216,7 @@ app.post('/api/cp/rules', async (req, res) => {
     while (offset < total) {
       const resp = await cp.post(
         '/show-access-rulebase',
-        { limit: LIMIT, offset, 'use-object-dictionary': true, 'details-level': 'full', ...extra },
+        { limit: LIMIT, offset, 'use-object-dictionary': true, 'details-level': 'full', 'show-hits': true, ...extra },
         { headers: { 'X-chkp-sid': sid } }
       );
       const d = resp.data;
