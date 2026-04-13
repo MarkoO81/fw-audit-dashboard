@@ -316,45 +316,54 @@ app.post('/api/cp/gateways', async (req, res) => {
 });
 
 /** POST /api/cp/topology
- *  Body: { server, port?, sid, uid, objectType? }
- *  Fetches a single gateway/cluster object by UID and normalises its
- *  interface topology table into a clean structure for the diagram.
+ *  Body: { server, port?, sid, uid, objectType?, rawObject? }
+ *
+ *  If rawObject is provided (full CP object already fetched by the gateways
+ *  call) it is used directly — no second API call is made. This handles
+ *  non-standard gateway types like CpmiGatewayCkp that don't work with
+ *  show-simple-gateway / show-object.
+ *
+ *  Otherwise falls back to several API endpoints in order.
  */
 app.post('/api/cp/topology', async (req, res) => {
-  const { server, port = 443, sid, uid, objectType } = req.body;
+  const { server, port = 443, sid, uid, objectType, rawObject } = req.body;
   if (!uid) return res.status(400).json({ error: 'uid is required' });
-  const cp = cpClient(server, port);
-  const headers = { 'X-chkp-sid': sid };
-  const errors = [];
-
-  // Build ordered endpoint list — put the most-likely match first based on known object type
-  const isCluster = /cluster/i.test(objectType || '');
-  const endpoints = isCluster
-    ? ['/show-simple-cluster', '/show-simple-gateway', '/show-object']
-    : ['/show-simple-gateway', '/show-simple-cluster', '/show-object'];
 
   let raw = null;
-  for (const endpoint of endpoints) {
-    try {
-      const r = await cp.post(endpoint, { uid, 'details-level': 'full' }, { headers });
-      // show-object wraps result differently
-      raw = endpoint === '/show-object' ? r.data : r.data;
-      if (raw && raw.uid) break;
-      raw = null;
-    } catch (e) {
-      errors.push(`${endpoint}: ${e.response?.data?.message || e.message}`);
+
+  // ── Fast path: caller already has the full object ─────────────
+  if (rawObject && rawObject.uid) {
+    raw = rawObject;
+    console.log(`[topology] Using cached object "${raw.name}" (type=${raw.type})`);
+  } else {
+    // ── API fetch with fallbacks ───────────────────────────────
+    const cp = cpClient(server, port);
+    const headers = { 'X-chkp-sid': sid };
+    const errors = [];
+
+    const isCluster = /cluster/i.test(objectType || '');
+    const endpoints = isCluster
+      ? ['/show-simple-cluster', '/show-simple-gateway', '/show-object']
+      : ['/show-simple-gateway', '/show-simple-cluster', '/show-object'];
+
+    for (const endpoint of endpoints) {
+      try {
+        const r = await cp.post(endpoint, { uid, 'details-level': 'full' }, { headers });
+        if (r.data && r.data.uid) { raw = r.data; break; }
+      } catch (e) {
+        errors.push(`${endpoint}: ${e.response?.data?.message || e.message}`);
+      }
     }
-  }
 
-  if (!raw || !raw.uid) {
-    console.error(`[topology] All endpoints failed for uid=${uid}:`, errors);
-    return res.status(404).json({
-      error: `Could not fetch gateway object. Tried: ${endpoints.join(', ')}`,
-      details: errors,
-    });
+    if (!raw) {
+      console.error(`[topology] All endpoints failed for uid=${uid}:`, errors);
+      return res.status(404).json({
+        error: `Could not fetch gateway object. Tried: ${endpoints.join(', ')}`,
+        details: errors,
+      });
+    }
+    console.log(`[topology] Loaded "${raw.name}" (type=${raw.type}) via API`);
   }
-
-  console.log(`[topology] Loaded "${raw.name}" (type=${raw.type}) via uid=${uid}`);
 
   // Normalise interfaces
   const ifaces = (raw.interfaces || []).map(iface => {

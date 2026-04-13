@@ -1149,7 +1149,9 @@ async function selectGw(idx) {
   expand.scrollIntoView({ behavior:'smooth', block:'nearest' });
 
   try {
-    topoData = await api('topology', { uid: gw.uid, objectType: gw.type });
+    // Pass the full raw object we already have — avoids a second API call
+    // and handles types like CpmiGatewayCkp that show-simple-gateway rejects
+    topoData = await api('topology', { uid: gw.uid, objectType: gw.type, rawObject: gw });
     renderTopoDiagram(topoData, expand);
   } catch(e) {
     expand.innerHTML = `<div class="topo-empty">
