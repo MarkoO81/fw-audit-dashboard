@@ -206,6 +206,8 @@
   .gw-type-badge{font-size:10px;padding:2px 7px;border-radius:4px;font-weight:700;background:var(--surface2);color:var(--text-dim);border:1px solid var(--border);}
   .gw-type-badge.cluster{background:rgba(108,123,255,.15);color:var(--accent);border-color:var(--accent);}
   .gw-expand-hint{font-size:9px;color:var(--text-dim);margin-top:2px;}
+  .vendor-badge{position:absolute;bottom:8px;right:8px;width:22px;height:22px;border-radius:5px;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.08);}
+  .vendor-badge img,.vendor-badge svg{width:16px;height:16px;object-fit:contain;}
   /* expand panel */
   .topo-expand{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-top:16px;display:none;}
   .topo-expand.open{display:block;animation:fadeIn .25s;}
@@ -1138,6 +1140,52 @@ async function loadTopology() {
   }
 }
 
+// Detect firewall vendor from gateway type string
+function detectVendor(type) {
+  if (!type) return null;
+  const t = type.toLowerCase();
+  if (/checkpoint|cpmi|ckp|cpmisimplegateway|cpmigatewaycluster/.test(t)) return 'checkpoint';
+  if (/fortinet|fortigate/.test(t)) return 'fortinet';
+  if (/paloalto|pan-/.test(t)) return 'paloalto';
+  if (/cisco|asa|ftd/.test(t)) return 'cisco';
+  if (/juniper|srx/.test(t)) return 'juniper';
+  return null;
+}
+
+// Returns an SVG logo for known vendors, null otherwise
+function vendorLogoSvg(vendor) {
+  if (vendor === 'checkpoint') {
+    // Check Point logo: red circle with white "CP" letters style mark
+    return `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" fill="#CC0000" stroke="#ff3333" stroke-width="1"/>
+      <text x="16" y="21" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="13" fill="white" letter-spacing="-1">CP</text>
+    </svg>`;
+  }
+  if (vendor === 'fortinet') {
+    return `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#EE3124"/>
+      <path d="M8 8h6v4H8V8zm0 6h10v4H8v-4zm0 6h6v4H8v-4z" fill="white"/>
+    </svg>`;
+  }
+  if (vendor === 'paloalto') {
+    return `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#FA582D"/>
+      <text x="16" y="21" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="11" fill="white">PA</text>
+    </svg>`;
+  }
+  if (vendor === 'cisco') {
+    return `<svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="32" height="32" rx="6" fill="#1BA0D7"/>
+      <rect x="7" y="13" width="3" height="7" rx="1" fill="white"/>
+      <rect x="11" y="10" width="3" height="10" rx="1" fill="white"/>
+      <rect x="15" y="8" width="3" height="12" rx="1" fill="white"/>
+      <rect x="19" y="10" width="3" height="10" rx="1" fill="white"/>
+      <rect x="23" y="13" width="3" height="7" rx="1" fill="white"/>
+    </svg>`;
+  }
+  return null;
+}
+
 function renderGwGrid(gws) {
   const grid = document.getElementById('topo-gw-grid');
   const isCluster = t => /cluster/i.test(t||'');
@@ -1146,11 +1194,15 @@ function renderGwGrid(gws) {
     const color  = isCluster(gw.type) ? '#a78bfa' : '#6c7bff';
     const typeLabel = isCluster(gw.type) ? 'Cluster' : 'Gateway';
     const ip = gw['ipv4-address'] || gw['ip-address'] || gw.ipv4 || '';
+    const vendor = detectVendor(gw.type);
+    const logoSvg = vendorLogoSvg(vendor);
+    const badgeHtml = logoSvg ? `<div class="vendor-badge" title="${vendor}">${logoSvg}</div>` : '';
     return `<div class="gw-card" id="gwcard-${idx}" onclick="selectGw(${idx})" title="Click to view topology">
       <div class="gw-icon-wrap">${gwShieldSvg(color, true)}</div>
       <div class="gw-name">${esc(gw.name)}</div>
       ${ip ? `<div class="gw-ip">${esc(ip)}</div>` : ''}
       <div class="gw-type ${isCluster(gw.type)?'cluster':''}">${typeLabel}</div>
+      ${badgeHtml}
     </div>`;
   }).join('') + '</div>';
 }
@@ -1554,6 +1606,19 @@ function drawNodes() {
   });
 }
 
+// Cache for vendor logo Image objects (SVG data URLs)
+const _vendorImgCache = {};
+function getVendorImg(vendor) {
+  if (!vendor) return null;
+  if (_vendorImgCache[vendor]) return _vendorImgCache[vendor];
+  const svg = vendorLogoSvg(vendor);
+  if (!svg) return null;
+  const img = new Image();
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  _vendorImgCache[vendor] = img;
+  return img;
+}
+
 function drawGwNode(n, hov) {
   const r=n.r;
   // glow
@@ -1574,6 +1639,21 @@ function drawGwNode(n, hov) {
   _ctx.lineTo(n.x-s*.5,py+s*.25); _ctx.closePath(); _ctx.stroke();
   // network dot
   _ctx.fillStyle='#6c7bff'; _ctx.beginPath(); _ctx.arc(n.x,n.y+r*.1,3,0,Math.PI*2); _ctx.fill();
+  // vendor logo badge (bottom-right of node circle)
+  const vendor = n.gw ? detectVendor(n.gw.type) : null;
+  if (vendor) {
+    const img = getVendorImg(vendor);
+    if (img && img.complete && img.naturalWidth) {
+      const bSize = r * 0.62;
+      const bx = n.x + r * 0.55 - bSize / 2;
+      const by = n.y + r * 0.55 - bSize / 2;
+      // badge background circle
+      _ctx.beginPath(); _ctx.arc(n.x + r * 0.55, n.y + r * 0.55, bSize * 0.65, 0, Math.PI*2);
+      _ctx.fillStyle='rgba(0,0,0,0.65)'; _ctx.shadowBlur=0; _ctx.fill();
+      _ctx.strokeStyle='rgba(255,255,255,0.12)'; _ctx.lineWidth=1; _ctx.stroke();
+      _ctx.drawImage(img, bx, by, bSize, bSize);
+    }
+  }
 }
 
 function drawInternetNode(n, hov) {
