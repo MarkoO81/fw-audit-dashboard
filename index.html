@@ -256,6 +256,69 @@
   .progress-bar{height:100%;background:var(--accent);border-radius:999px;transition:width .3s;}
 
   @media(max-width:600px){main{padding:12px;}.sev-strip{grid-template-columns:repeat(3,1fr);}}
+
+  /* ── Tab navigation ── */
+  .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px;overflow-x:auto;flex-shrink:0;}
+  .tab-btn{padding:10px 20px;font-size:13px;font-weight:600;border:none;background:none;color:var(--text-dim);
+    cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;
+    transition:color .15s,border-color .15s;display:flex;align-items:center;gap:6px;}
+  .tab-btn:hover{color:var(--text);}
+  .tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+  .tab-btn .tbadge{font-size:10px;font-weight:700;padding:1px 6px;border-radius:99px;background:var(--surface2);color:var(--text-dim);}
+  .tab-btn.active .tbadge{background:rgba(108,123,255,.2);color:var(--accent);}
+  .tab-pane{display:none;}
+  .tab-pane.active{display:block;}
+
+  /* ── Findings tab ── */
+  .findings-list{display:flex;flex-direction:column;gap:8px;}
+  .finding-row{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 16px;
+    display:flex;align-items:center;gap:12px;cursor:pointer;transition:border-color .15s;}
+  .finding-row:hover{border-color:var(--accent);}
+  .finding-sev{width:80px;flex-shrink:0;text-align:center;padding:3px 0;border-radius:5px;font-size:11px;font-weight:700;}
+  .finding-name{font-weight:600;font-size:13px;}
+  .finding-meta{font-size:11px;color:var(--text-dim);margin-top:2px;}
+  .finding-flags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;}
+
+  /* ── Network discovery ── */
+  .nd-subnet-block{background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:16px;overflow:hidden;}
+  .nd-subnet-hdr{background:var(--surface2);border-bottom:1px solid var(--border);padding:10px 16px;
+    display:flex;align-items:center;gap:10px;}
+  .nd-subnet-label{font-weight:700;font-size:13px;font-family:monospace;}
+  .nd-subnet-iface{font-size:11px;color:var(--text-dim);}
+  .nd-device-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;padding:12px;}
+  .nd-device{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;
+    display:flex;align-items:center;gap:10px;}
+  .nd-device-icon{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .nd-device-ip{font-family:monospace;font-size:12px;font-weight:700;}
+  .nd-device-mac{font-size:10px;color:var(--text-dim);font-family:monospace;}
+  .nd-device-label{font-size:11px;color:var(--text-dim);}
+  .nd-status-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+  .nd-status-dot.up{background:var(--ok);box-shadow:0 0 5px var(--ok);}
+  .nd-status-dot.arp{background:var(--medium);}
+  .nd-status-dot.down{background:var(--border);}
+  .nd-empty{padding:40px;text-align:center;color:var(--text-dim);font-size:13px;}
+  .nd-scan-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:16px;}
+  .nd-scan-bar input{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;
+    padding:7px 12px;font-size:13px;outline:none;flex:1;min-width:160px;}
+  .nd-scan-bar input:focus{border-color:var(--accent);}
+  .nd-summary{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;}
+  .nd-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 18px;text-align:center;}
+  .nd-stat .n{font-size:22px;font-weight:700;color:var(--text);}
+  .nd-stat .l{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;}
+
+  /* ── Log collector ── */
+  .lc-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px;}
+  .lc-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;}
+  .lc-field{display:flex;flex-direction:column;gap:5px;flex:1;min-width:140px;}
+  .lc-field label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);}
+  .lc-field input,.lc-field select{background:var(--surface2);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:8px 11px;font-size:13px;outline:none;}
+  .lc-field input:focus,.lc-field select:focus{border-color:var(--accent);}
+  .lc-log{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;
+    font-family:monospace;font-size:11px;color:var(--ok);max-height:260px;overflow-y:auto;margin-top:14px;line-height:1.6;}
+  .lc-log .err{color:var(--critical);}
+  .lc-log .info{color:var(--low);}
+  .lc-log .warn{color:var(--medium);}
 </style>
 </head>
 <body>
@@ -363,122 +426,260 @@
   <!-- DASHBOARD -->
   <div id="dashboard" style="display:none">
 
-    <!-- ── SEVERITY ROW ── -->
-    <section>
-      <h2>Severity Overview — click to filter</h2>
-      <div class="sev-strip" id="sev-strip"></div>
-    </section>
+    <!-- Tab navigation -->
+    <nav class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('overview')" id="tbtn-overview">
+        ◈ Overview <span class="tbadge" id="tb-total">0</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('findings')" id="tbtn-findings">
+        ⚑ Findings <span class="tbadge" id="tb-flags">0</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('rules')" id="tbtn-rules">
+        ≡ Rules <span class="tbadge" id="tb-rules">0</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('topology')" id="tbtn-topology">
+        ⬡ Topology
+      </button>
+      <button class="tab-btn" onclick="switchTab('netdiscovery')" id="tbtn-netdiscovery">
+        ⊙ Network Discovery
+      </button>
+      <button class="tab-btn" onclick="switchTab('logcollector')" id="tbtn-logcollector">
+        ⇢ Log Collector
+      </button>
+    </nav>
 
-    <!-- ── ISSUE STATS ── -->
-    <section>
-      <h2>Issue Breakdown</h2>
-      <div class="issue-grid" id="issue-grid"></div>
-    </section>
+    <!-- ══ OVERVIEW ══ -->
+    <div class="tab-pane active" id="tab-overview">
+      <section>
+        <h2>Severity Overview — click to filter</h2>
+        <div class="sev-strip" id="sev-strip"></div>
+      </section>
+      <section>
+        <h2>Issue Breakdown</h2>
+        <div class="issue-grid" id="issue-grid"></div>
+      </section>
+      <section>
+        <h2>NIS2 / DORA Compliance Risk Score</h2>
+        <div class="compliance-wrap">
+          <div class="score-circle-wrap">
+            <div class="score-ring">
+              <svg width="130" height="130" viewBox="0 0 130 130">
+                <circle cx="65" cy="65" r="54" fill="none" stroke="var(--surface)" stroke-width="12"/>
+                <circle id="score-arc" cx="65" cy="65" r="54" fill="none" stroke="var(--ok)" stroke-width="12"
+                  stroke-dasharray="339.3" stroke-dashoffset="339.3" stroke-linecap="round"/>
+              </svg>
+              <div class="score-val" id="score-val">
+                <span style="font-size:12px;color:var(--text-dim)">score</span>
+              </div>
+            </div>
+            <div class="score-grade" id="score-grade"></div>
+            <div class="score-desc" id="score-desc"></div>
+          </div>
+          <div class="controls-grid" id="controls-grid"></div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text-dim);line-height:1.6">
+          Score reflects adherence to:
+          <strong style="color:var(--text)">NIS2 Directive Art. 21</strong> (security risk management measures) and
+          <strong style="color:var(--text)">DORA Regulation Art. 9</strong> (ICT security policies, procedures, protocols and tools).
+          100 = fully compliant, 0 = critical exposure.
+        </div>
+      </section>
+      <section>
+        <h2>Finding Distribution</h2>
+        <div class="panel" id="risk-bars"></div>
+      </section>
+    </div>
 
-    <!-- ── NIS2 / DORA ── -->
-    <section>
-      <h2>NIS2 / DORA Compliance Risk Score</h2>
-      <div class="compliance-wrap">
-        <div class="score-circle-wrap">
-          <div class="score-ring">
-            <svg width="130" height="130" viewBox="0 0 130 130">
-              <circle cx="65" cy="65" r="54" fill="none" stroke="var(--surface)" stroke-width="12"/>
-              <circle id="score-arc" cx="65" cy="65" r="54" fill="none" stroke="var(--ok)" stroke-width="12"
-                stroke-dasharray="339.3" stroke-dashoffset="339.3" stroke-linecap="round"/>
-            </svg>
-            <div class="score-val" id="score-val">
-              <span style="font-size:12px;color:var(--text-dim)">score</span>
+    <!-- ══ FINDINGS ══ -->
+    <div class="tab-pane" id="tab-findings">
+      <section>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <h2 style="margin-bottom:0">Flagged Rules</h2>
+          <div class="btn-row">
+            <select id="filter-sev-findings" onchange="renderFindings()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:12px;outline:none;">
+              <option value="">All Severities</option>
+              <option value="CRITICAL">Critical</option>
+              <option value="HIGH">High</option>
+              <option value="MEDIUM">Medium</option>
+              <option value="LOW">Low</option>
+            </select>
+            <button class="sec" onclick="exportCSV()">Export CSV</button>
+          </div>
+        </div>
+        <div id="findings-list"></div>
+      </section>
+    </div>
+
+    <!-- ══ RULES ══ -->
+    <div class="tab-pane" id="tab-rules">
+      <section>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+          <h2 style="margin-bottom:0">Rules — <span id="active-layer-label"></span></h2>
+          <div class="btn-row">
+            <button class="sec" onclick="exportCSV()">Export Flagged CSV</button>
+            <button class="sec" onclick="window.print()">Print Report</button>
+            <button class="sec" onclick="backToLayers()">Change Policy</button>
+          </div>
+        </div>
+        <div class="filters">
+          <input type="text" id="search" placeholder="Search name, address, service, comment…" oninput="applyFilters()">
+          <select id="filter-action" onchange="applyFilters()">
+            <option value="">All Actions</option>
+            <option value="allow">Allow / Permit</option>
+            <option value="deny">Deny / Reject</option>
+            <option value="drop">Drop</option>
+          </select>
+          <select id="filter-sev" onchange="applyFilters()">
+            <option value="">All Severities</option>
+            <option value="CRITICAL">Critical</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+            <option value="OK">OK</option>
+          </select>
+          <div class="badge-filter" id="risk-badges"></div>
+        </div>
+        <div class="table-meta">
+          Showing <strong id="visible-count">0</strong> of <strong id="total-count">0</strong> rules
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="rules-thead"></thead>
+            <tbody id="rules-tbody"></tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </section>
+    </div>
+
+    <!-- ══ TOPOLOGY ══ -->
+    <div class="tab-pane" id="tab-topology">
+      <section id="sec-topology">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+          <h2 style="margin-bottom:0">Gateways &amp; Topology</h2>
+          <button class="sec" id="btn-load-topo" onclick="loadTopology()">Load Gateways</button>
+        </div>
+        <div id="topo-gw-grid"></div>
+        <div class="topo-expand" id="topo-expand">
+          <div class="topo-options" id="topo-options" style="display:none">
+            <button class="view-btn active" id="vbtn-single" onclick="setView('single')">Single GW</button>
+            <button class="view-btn" id="vbtn-multi" onclick="setView('multi')">All GWs</button>
+            <div class="topo-opt-sep"></div>
+            <label><input type="checkbox" id="opt-labels" checked onchange="redrawTopo()"> Labels</label>
+            <label><input type="checkbox" id="opt-zones" checked onchange="redrawTopo()"> Zones</label>
+            <label><input type="checkbox" id="opt-subnets" checked onchange="redrawTopo()"> Subnets</label>
+            <label><input type="checkbox" id="opt-anim" checked onchange="toggleAnim()"> Traffic flow</label>
+            <div class="topo-opt-sep"></div>
+            <label>Speed:
+              <select id="opt-speed" onchange="redrawTopo()">
+                <option value="slow">Slow</option>
+                <option value="normal" selected>Normal</option>
+                <option value="fast">Fast</option>
+              </select>
+            </label>
+            <button class="view-btn" onclick="resetTopoView()" style="margin-left:auto">Reset View</button>
+          </div>
+          <div id="topo-canvas-container"></div>
+        </div>
+        <div class="topo-tooltip" id="topo-tt"></div>
+      </section>
+    </div>
+
+    <!-- ══ NETWORK DISCOVERY ══ -->
+    <div class="tab-pane" id="tab-netdiscovery">
+      <section>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px">
+          <h2 style="margin-bottom:0">Network Discovery</h2>
+          <div class="btn-row">
+            <button class="sec" onclick="exportDiscoveryCSV()" id="btn-nd-export" disabled>Export CSV</button>
+          </div>
+        </div>
+        <div class="nd-scan-bar">
+          <input id="nd-subnet" type="text" placeholder="Subnet to scan (e.g. 192.168.1.0/24) — leave blank for ARP table only">
+          <button id="btn-nd-scan" onclick="scanNetwork()">Scan Network</button>
+          <button class="sec" onclick="readArpTable()">ARP Table Only</button>
+        </div>
+        <div id="nd-alert" class="alert" style="display:none"></div>
+        <div id="nd-summary" class="nd-summary" style="display:none">
+          <div class="nd-stat"><div class="n" id="nd-total">0</div><div class="l">Devices</div></div>
+          <div class="nd-stat"><div class="n" id="nd-up">0</div><div class="l">Responding</div></div>
+          <div class="nd-stat"><div class="n" id="nd-subnets">0</div><div class="l">Subnets</div></div>
+          <div class="nd-stat"><div class="n" id="nd-gw-count">0</div><div class="l">Gateways</div></div>
+        </div>
+        <div id="nd-results">
+          <div class="nd-empty">Run a scan or read the ARP table to discover network devices.</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- ══ LOG COLLECTOR ══ -->
+    <div class="tab-pane" id="tab-logcollector">
+      <section>
+        <h2>Log Collector — Forward Audit Events via Syslog / CEF</h2>
+
+        <div class="lc-panel">
+          <h3>Collector Configuration</h3>
+          <div class="lc-row">
+            <div class="lc-field" style="flex:2">
+              <label>Collector Host / IP</label>
+              <input id="lc-host" type="text" placeholder="192.168.1.10 or siem.company.com">
+            </div>
+            <div class="lc-field" style="flex:0 0 100px">
+              <label>Port</label>
+              <input id="lc-port" type="number" value="514">
+            </div>
+            <div class="lc-field" style="flex:0 0 100px">
+              <label>Protocol</label>
+              <select id="lc-proto">
+                <option value="udp">UDP</option>
+                <option value="tcp">TCP</option>
+              </select>
+            </div>
+            <div class="lc-field" style="flex:0 0 130px">
+              <label>Format</label>
+              <select id="lc-format">
+                <option value="cef">CEF (ArcSight)</option>
+                <option value="syslog">Syslog RFC3164</option>
+                <option value="json">JSON</option>
+              </select>
             </div>
           </div>
-          <div class="score-grade" id="score-grade"></div>
-          <div class="score-desc" id="score-desc"></div>
+          <div class="lc-row">
+            <div class="lc-field">
+              <label>Facility</label>
+              <select id="lc-facility">
+                <option value="16">Local0</option>
+                <option value="17">Local1</option>
+                <option value="18">Local2</option>
+                <option value="20" selected>Local4</option>
+                <option value="23">Local7</option>
+              </select>
+            </div>
+            <div class="lc-field">
+              <label>Source Tag</label>
+              <input id="lc-tag" type="text" value="AIVERTO-AUDIT">
+            </div>
+          </div>
+          <div class="btn-row">
+            <button id="btn-lc-test" onclick="testCollector()">Test Connection</button>
+            <button class="sec" id="btn-lc-send" onclick="sendAuditLog()" disabled>Send Audit Report</button>
+            <button class="sec" onclick="saveCollectorConfig()">Save Config</button>
+          </div>
+          <div class="lc-log" id="lc-log"><span class="info">// Log output will appear here…</span></div>
         </div>
-        <div class="controls-grid" id="controls-grid"></div>
-      </div>
-      <div style="margin-top:10px;font-size:11px;color:var(--text-dim);line-height:1.6">
-        Score reflects adherence to:
-        <strong style="color:var(--text)">NIS2 Directive Art. 21</strong> (security risk management measures) and
-        <strong style="color:var(--text)">DORA Regulation Art. 9</strong> (ICT security policies, procedures, protocols and tools).
-        100 = fully compliant, 0 = critical exposure.
-      </div>
-    </section>
 
-    <!-- ── TOPOLOGY ── -->
-    <section id="sec-topology">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
-        <h2 style="margin-bottom:0">Gateways &amp; Topology</h2>
-        <button class="sec" id="btn-load-topo" onclick="loadTopology()">Load Gateways</button>
-      </div>
-      <div id="topo-gw-grid"></div>
-      <div class="topo-expand" id="topo-expand">
-        <div class="topo-options" id="topo-options" style="display:none">
-          <button class="view-btn active" id="vbtn-single" onclick="setView('single')">Single GW</button>
-          <button class="view-btn" id="vbtn-multi" onclick="setView('multi')">All GWs</button>
-          <div class="topo-opt-sep"></div>
-          <label><input type="checkbox" id="opt-labels" checked onchange="redrawTopo()"> Labels</label>
-          <label><input type="checkbox" id="opt-zones" checked onchange="redrawTopo()"> Zones</label>
-          <label><input type="checkbox" id="opt-subnets" checked onchange="redrawTopo()"> Subnets</label>
-          <label><input type="checkbox" id="opt-anim" checked onchange="toggleAnim()"> Traffic flow</label>
-          <div class="topo-opt-sep"></div>
-          <label>Speed:
-            <select id="opt-speed" onchange="redrawTopo()">
-              <option value="slow">Slow</option>
-              <option value="normal" selected>Normal</option>
-              <option value="fast">Fast</option>
-            </select>
-          </label>
-          <button class="view-btn" onclick="resetTopoView()" style="margin-left:auto">Reset View</button>
+        <div class="lc-panel">
+          <h3>What gets sent</h3>
+          <ul style="font-size:13px;color:var(--text-dim);line-height:2;padding-left:18px;">
+            <li><strong style="color:var(--text)">Test message</strong> — sends a single syslog ping to verify connectivity</li>
+            <li><strong style="color:var(--text)">Audit Report</strong> — sends one event per flagged rule (Critical/High/Medium/Low)</li>
+            <li>Each event includes: rule name, severity, flags, source, destination, service, action, hit count</li>
+            <li>CEF format includes DeviceVendor=CheckPoint, DeviceProduct=Firewall-Audit</li>
+            <li>Syslog severity maps: Critical→2, High→4, Medium→5, Low→6</li>
+          </ul>
         </div>
-        <div id="topo-canvas-container"></div>
-      </div>
-      <div class="topo-tooltip" id="topo-tt"></div>
-    </section>
-
-    <!-- ── RISK BARS ── -->
-    <section>
-      <h2>Finding Distribution</h2>
-      <div class="panel" id="risk-bars"></div>
-    </section>
-
-    <!-- ── RULES TABLE ── -->
-    <section>
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
-        <h2 style="margin-bottom:0">Rules — <span id="active-layer-label"></span></h2>
-        <div class="btn-row">
-          <button class="sec" onclick="exportCSV()">Export Flagged CSV</button>
-          <button class="sec" onclick="window.print()">Print Report</button>
-          <button class="sec" onclick="backToLayers()">Change Policy</button>
-        </div>
-      </div>
-      <div class="filters">
-        <input type="text" id="search" placeholder="Search name, address, service, comment…" oninput="applyFilters()">
-        <select id="filter-action" onchange="applyFilters()">
-          <option value="">All Actions</option>
-          <option value="allow">Allow / Permit</option>
-          <option value="deny">Deny / Reject</option>
-          <option value="drop">Drop</option>
-        </select>
-        <select id="filter-sev" onchange="applyFilters()">
-          <option value="">All Severities</option>
-          <option value="CRITICAL">Critical</option>
-          <option value="HIGH">High</option>
-          <option value="MEDIUM">Medium</option>
-          <option value="LOW">Low</option>
-          <option value="OK">OK</option>
-        </select>
-        <div class="badge-filter" id="risk-badges"></div>
-      </div>
-      <div class="table-meta">
-        Showing <strong id="visible-count">0</strong> of <strong id="total-count">0</strong> rules
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead id="rules-thead"></thead>
-          <tbody id="rules-tbody"></tbody>
-        </table>
-      </div>
-      <div class="pagination" id="pagination"></div>
-    </section>
+      </section>
+    </div>
 
   </div><!-- /dashboard -->
 </main>
@@ -755,6 +956,7 @@ function scoreGrade(s) {
 function showDashboard() {
   document.getElementById('sec-loading').style.display='none';
   document.getElementById('dashboard').style.display='';
+  switchTab('overview');
   renderSevStrip();
   renderIssueGrid();
   renderCompliance();
@@ -762,6 +964,21 @@ function showDashboard() {
   renderBadges();
   renderTableHeader();
   applyFilters();
+  // update tab badges
+  const flagged = auditedRules.filter(r=>r.flags.length);
+  document.getElementById('tb-total').textContent = auditedRules.length;
+  document.getElementById('tb-flags').textContent = flagged.length;
+  document.getElementById('tb-rules').textContent = auditedRules.length;
+  // enable send log button if rules loaded
+  document.getElementById('btn-lc-send').disabled = !auditedRules.length;
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+name)?.classList.add('active');
+  document.getElementById('tbtn-'+name)?.classList.add('active');
+  if (name==='findings') renderFindings();
 }
 
 /* ── Severity strip ── */
@@ -862,6 +1079,40 @@ function renderBadges() {
   document.getElementById('risk-badges').innerHTML=
     ['CRITICAL','HIGH','MEDIUM','LOW','OK'].map(s=>
       `<span class="badge ${s}" data-sev="${s}" onclick="toggleSev('${s}')">${s}</span>`).join('');
+}
+
+function renderFindings() {
+  const sevFilter = document.getElementById('filter-sev-findings')?.value || '';
+  const flagged = auditedRules.filter(r => r.flags.length && (!sevFilter || r.severity===sevFilter));
+  const col = {CRITICAL:'var(--critical)',HIGH:'var(--high)',MEDIUM:'var(--medium)',LOW:'var(--low)',OK:'var(--ok)'};
+  const bg  = {CRITICAL:'var(--critical-bg)',HIGH:'var(--high-bg)',MEDIUM:'var(--medium-bg)',LOW:'var(--low-bg)',OK:'var(--ok-bg)'};
+  if (!flagged.length) {
+    document.getElementById('findings-list').innerHTML = '<div class="nd-empty">No flagged rules match the current filter.</div>';
+    return;
+  }
+  document.getElementById('findings-list').innerHTML = '<div class="findings-list">' + flagged.map((r,i) => {
+    const flags = r.flags.map(f => `<span class="tag ${RISK_MAP[f]?.sev||'INFO'}" title="${esc(RISK_MAP[f]?.desc||f)}">${esc(RISK_MAP[f]?.label||f)}</span>`).join('');
+    return `<div class="finding-row" onclick="goToRule(${r.rule_num})" title="Click to view in Rules tab">
+      <div class="finding-sev" style="background:${bg[r.severity]};color:${col[r.severity]}">${r.severity}</div>
+      <div style="flex:1;min-width:0">
+        <div class="finding-name">#${r.rule_num} ${esc(r.name||'(unnamed)')}</div>
+        <div class="finding-meta">
+          ${r.src?`Src: <strong>${esc(r.src)}</strong> → `:''}
+          ${r.dst?`Dst: <strong>${esc(r.dst)}</strong>`:''}
+          ${r.service?` | Svc: <strong>${esc(r.service)}</strong>`:''}
+          ${r.action?` | Action: <strong class="act-${r.action.toLowerCase()}">${esc(r.action)}</strong>`:''}
+          ${r.hits!==undefined?` | Hits: <strong>${r.hits}</strong>`:''}
+        </div>
+        <div class="finding-flags">${flags}</div>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+function goToRule(ruleNum) {
+  switchTab('rules');
+  document.getElementById('search').value = String(ruleNum);
+  applyFilters();
 }
 
 let activeSev=null;
@@ -1060,6 +1311,225 @@ function loadSample() {
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ════════════════════════════════════════════════════════════════
+// NETWORK DISCOVERY
+// ════════════════════════════════════════════════════════════════
+let _ndDevices = [];
+
+async function readArpTable() {
+  await _runDiscovery(null);
+}
+
+async function scanNetwork() {
+  const subnet = document.getElementById('nd-subnet').value.trim();
+  await _runDiscovery(subnet || null);
+}
+
+async function _runDiscovery(subnet) {
+  const btn = document.getElementById('btn-nd-scan');
+  const alert = document.getElementById('nd-alert');
+  alert.style.display = 'none';
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Scanning…';
+  document.getElementById('nd-results').innerHTML = '<div class="nd-empty"><span class="spinner"></span> Scanning…</div>';
+
+  try {
+    const body = { ...(session.sid ? { server: session.server, port: session.port, sid: session.sid } : {}) };
+    if (subnet) body.subnet = subnet;
+    const r = await fetch('/api/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.error || r.statusText); }
+    const data = await r.json();
+    _ndDevices = data.devices || [];
+    renderNdResults();
+  } catch(e) {
+    alert.className = 'alert err'; alert.style.display = '';
+    alert.textContent = 'Discovery failed: ' + e.message;
+    document.getElementById('nd-results').innerHTML = '';
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Scan Network';
+  }
+}
+
+function guessDeviceType(d) {
+  const mac = (d.mac||'').toUpperCase();
+  if (d.isGateway) return { icon:'🔥', label:'Firewall / GW', color:'#6c7bff' };
+  if (/^00:50:56|^00:0C:29|^00:05:69|^00:1C:14/.test(mac)) return { icon:'💻', label:'VMware VM', color:'#4da6ff' };
+  if (/^28:D2:44|^B8:27:EB|^DC:A6:32|^E4:5F:01/.test(mac)) return { icon:'🍓', label:'Raspberry Pi', color:'#f5c842' };
+  if (/^AC:DE:48|^00:23:DF/.test(mac)) return { icon:'📡', label:'Network Device', color:'#4dff91' };
+  if (d.iface && /eth|eno|ens/.test(d.iface)) return { icon:'🖥', label:'Host', color:'#e2e4f0' };
+  return { icon:'◉', label:'Device', color:'#7a7f9a' };
+}
+
+function renderNdResults() {
+  const results = document.getElementById('nd-results');
+  const summary = document.getElementById('nd-summary');
+  const exportBtn = document.getElementById('btn-nd-export');
+
+  if (!_ndDevices.length) {
+    results.innerHTML = '<div class="nd-empty">No devices found. Try scanning a subnet.</div>';
+    summary.style.display = 'none';
+    return;
+  }
+
+  // Mark known gateways
+  const gwIps = new Set((topoGateways||[]).map(g=>g.ipv4||g['ipv4-address']||'').filter(Boolean));
+  _ndDevices.forEach(d => { d.isGateway = gwIps.has(d.ip); });
+
+  // Group by subnet (/24)
+  const groups = {};
+  _ndDevices.forEach(d => {
+    const parts = d.ip.split('.');
+    const key = parts.length===4 ? parts.slice(0,3).join('.')+'.0/24' : 'Other';
+    (groups[key]||(groups[key]=[])).push(d);
+  });
+
+  const up = _ndDevices.filter(d=>d.status==='up').length;
+  document.getElementById('nd-total').textContent = _ndDevices.length;
+  document.getElementById('nd-up').textContent = up;
+  document.getElementById('nd-subnets').textContent = Object.keys(groups).length;
+  document.getElementById('nd-gw-count').textContent = _ndDevices.filter(d=>d.isGateway).length;
+  summary.style.display = 'flex';
+  exportBtn.disabled = false;
+
+  results.innerHTML = Object.entries(groups).sort(([a],[b])=>a.localeCompare(b)).map(([subnet, devs]) => {
+    const ifaces = [...new Set(devs.map(d=>d.iface).filter(Boolean))].join(', ');
+    return `<div class="nd-subnet-block">
+      <div class="nd-subnet-hdr">
+        <span style="font-size:16px">⊂</span>
+        <span class="nd-subnet-label">${esc(subnet)}</span>
+        <span class="nd-subnet-iface">${ifaces ? 'via '+esc(ifaces) : ''}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text-dim)">${devs.length} device${devs.length!==1?'s':''}</span>
+      </div>
+      <div class="nd-device-grid">
+        ${devs.map(d => {
+          const dt = guessDeviceType(d);
+          const statusClass = d.status==='up' ? 'up' : d.status==='arp' ? 'arp' : 'down';
+          const statusLabel = d.status==='up' ? 'Ping OK' : d.status==='arp' ? 'ARP only' : 'No response';
+          return `<div class="nd-device" title="${esc(statusLabel)}">
+            <div class="nd-device-icon" style="background:${dt.color}22;color:${dt.color}">${dt.icon}</div>
+            <div style="min-width:0">
+              <div class="nd-device-ip">${esc(d.ip)}</div>
+              <div class="nd-device-mac">${esc(d.mac||'—')}</div>
+              <div class="nd-device-label" style="color:${dt.color}">${dt.label}</div>
+            </div>
+            <div class="nd-status-dot ${statusClass}" style="margin-left:auto;flex-shrink:0" title="${esc(statusLabel)}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function exportDiscoveryCSV() {
+  if (!_ndDevices.length) return;
+  const cols = ['ip','mac','iface','status','isGateway'];
+  const rows = [cols.join(','), ..._ndDevices.map(d=>cols.map(c=>`"${String(d[c]??'').replace(/"/g,'""')}"`).join(','))];
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download = 'network_discovery_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOG COLLECTOR
+// ════════════════════════════════════════════════════════════════
+let _lcConfig = JSON.parse(localStorage.getItem('lc_config')||'{}');
+
+function saveCollectorConfig() {
+  _lcConfig = {
+    host: document.getElementById('lc-host').value.trim(),
+    port: +document.getElementById('lc-port').value || 514,
+    proto: document.getElementById('lc-proto').value,
+    format: document.getElementById('lc-format').value,
+    facility: +document.getElementById('lc-facility').value,
+    tag: document.getElementById('lc-tag').value.trim() || 'AIVERTO-AUDIT',
+  };
+  localStorage.setItem('lc_config', JSON.stringify(_lcConfig));
+  lcLog('info', 'Config saved.');
+}
+
+function loadCollectorConfig() {
+  if (!_lcConfig.host) return;
+  document.getElementById('lc-host').value = _lcConfig.host || '';
+  document.getElementById('lc-port').value = _lcConfig.port || 514;
+  document.getElementById('lc-proto').value = _lcConfig.proto || 'udp';
+  document.getElementById('lc-format').value = _lcConfig.format || 'cef';
+  document.getElementById('lc-facility').value = _lcConfig.facility ?? 20;
+  document.getElementById('lc-tag').value = _lcConfig.tag || 'AIVERTO-AUDIT';
+}
+loadCollectorConfig();
+
+function lcLog(type, msg) {
+  const box = document.getElementById('lc-log');
+  const ts = new Date().toLocaleTimeString();
+  box.innerHTML += `\n<span class="${type}">[${ts}] ${esc(msg)}</span>`;
+  box.scrollTop = box.scrollHeight;
+}
+
+async function _lcPost(endpoint, body) {
+  const r = await fetch(endpoint, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const d = await r.json();
+  if (!r.ok) throw new Error(d.error || r.statusText);
+  return d;
+}
+
+async function testCollector() {
+  const cfg = {
+    host: document.getElementById('lc-host').value.trim(),
+    port: +document.getElementById('lc-port').value || 514,
+    proto: document.getElementById('lc-proto').value,
+    format: document.getElementById('lc-format').value,
+    facility: +document.getElementById('lc-facility').value,
+    tag: document.getElementById('lc-tag').value.trim() || 'AIVERTO-AUDIT',
+  };
+  if (!cfg.host) { lcLog('err', 'Collector host is required.'); return; }
+  lcLog('info', `Testing ${cfg.proto.toUpperCase()} connection to ${cfg.host}:${cfg.port}…`);
+  try {
+    const d = await _lcPost('/api/log-test', cfg);
+    lcLog('', `✓ ${d.message}`);
+  } catch(e) {
+    lcLog('err', '✗ ' + e.message);
+  }
+}
+
+async function sendAuditLog() {
+  const cfg = {
+    host: document.getElementById('lc-host').value.trim(),
+    port: +document.getElementById('lc-port').value || 514,
+    proto: document.getElementById('lc-proto').value,
+    format: document.getElementById('lc-format').value,
+    facility: +document.getElementById('lc-facility').value,
+    tag: document.getElementById('lc-tag').value.trim() || 'AIVERTO-AUDIT',
+  };
+  if (!cfg.host) { lcLog('err', 'Collector host is required.'); return; }
+  const flagged = auditedRules.filter(r=>r.flags.length && r.severity !== 'OK');
+  if (!flagged.length) { lcLog('warn', 'No flagged rules to send.'); return; }
+  lcLog('info', `Sending ${flagged.length} audit events to ${cfg.host}:${cfg.port} [${cfg.format.toUpperCase()}]…`);
+  try {
+    const events = flagged.map(r => ({
+      severity: r.severity,
+      ruleNum: r.rule_num,
+      name: r.name || '(unnamed)',
+      action: r.action,
+      src: r.src, dst: r.dst, service: r.service,
+      hits: r.hits,
+      flags: r.flags.join(', '),
+      comment: r.comment,
+    }));
+    const d = await _lcPost('/api/log-send', { ...cfg, events, server: session.server });
+    lcLog('', `✓ Sent ${d.sent} events. ${d.failed ? d.failed+' failed.' : ''}`);
+  } catch(e) {
+    lcLog('err', '✗ ' + e.message);
+  }
+}
 
 // ════════════════════════════════════════════════════════════════
 // TOPOLOGY — Canvas-based, full-featured

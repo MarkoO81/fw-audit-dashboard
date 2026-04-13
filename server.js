@@ -12,10 +12,13 @@
 
 'use strict';
 
-const express = require('express');
-const axios   = require('axios');
-const https   = require('https');
-const path    = require('path');
+const express        = require('express');
+const axios          = require('axios');
+const https          = require('https');
+const path           = require('path');
+const { execFile }   = require('child_process');
+const dgram          = require('dgram');
+const net            = require('net');
 
 const app  = express();
 const PORT = process.env.PORT || 3737;
@@ -437,6 +440,174 @@ app.post('/api/cp/debug-gw', async (req, res) => {
       details: err.response?.data,
     });
   }
+});
+
+// ─── network discovery ───────────────────────────────────────────────────────
+
+/** Ping a single IP; resolves to true if reachable. */
+function pingOne(ip) {
+  return new Promise(resolve => {
+    // -c 1 -W 1 on Linux; -c 1 -t 1 on macOS
+    const args = process.platform === 'darwin'
+      ? ['-c','1','-t','1', ip]
+      : ['-c','1','-W','1', ip];
+    execFile('ping', args, { timeout: 2000 }, err => resolve(!err));
+  });
+}
+
+/** Read system ARP table (works on Linux & macOS). */
+function readArp() {
+  return new Promise((resolve) => {
+    execFile('arp', ['-an'], { timeout: 3000 }, (err, stdout) => {
+      const devices = [];
+      if (err) return resolve(devices);
+      const lines = stdout.split('\n');
+      for (const line of lines) {
+        // Linux: ? (10.0.0.1) at aa:bb:cc:dd:ee:ff [ether] on eth0
+        // macOS: ? (10.0.0.1) at aa:bb:cc:dd:ee:ff on en0 ifscope ...
+        const m = line.match(/\((\d+\.\d+\.\d+\.\d+)\)\s+at\s+([0-9a-f:]+)\s+.*?(?:on\s+(\S+))?/i);
+        if (!m) continue;
+        const [, ip, mac, iface] = m;
+        if (mac === '(incomplete)' || mac === 'ff:ff:ff:ff:ff:ff') continue;
+        devices.push({ ip, mac: mac.toLowerCase(), iface: iface || '', status: 'arp' });
+      }
+      resolve(devices);
+    });
+  });
+}
+
+/** POST /api/discover
+ *  Body: { subnet?: string }
+ *  Returns: { devices: [{ip,mac,iface,status}] }
+ */
+app.post('/api/discover', async (req, res) => {
+  try {
+    const arpDevices = await readArp();
+    const byIp = {};
+    for (const d of arpDevices) byIp[d.ip] = d;
+
+    // If a subnet was provided, try to ping the whole /24 or /16 range
+    const { subnet } = req.body;
+    if (subnet) {
+      const m = subnet.match(/^(\d+)\.(\d+)\.(\d+)\.\d+\/(\d+)$/);
+      if (m) {
+        const [, a, b, c, prefix] = m.map(Number);
+        const targets = [];
+        if (prefix >= 24) {
+          for (let i = 1; i < 255; i++) targets.push(`${a}.${b}.${c}.${i}`);
+        } else if (prefix >= 16) {
+          for (let ci = 0; ci < 256; ci++)
+            for (let i = 1; i < 255; i++) targets.push(`${a}.${b}.${ci}.${i}`);
+        }
+        // Ping in batches of 40 concurrently
+        const BATCH = 40;
+        for (let i = 0; i < targets.length; i += BATCH) {
+          const batch = targets.slice(i, i + BATCH);
+          await Promise.all(batch.map(async ip => {
+            const alive = await pingOne(ip);
+            if (alive) {
+              if (!byIp[ip]) byIp[ip] = { ip, mac: '', iface: '', status: 'up' };
+              else byIp[ip].status = 'up';
+            }
+          }));
+        }
+      }
+    }
+
+    res.json({ devices: Object.values(byIp) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── log collector ────────────────────────────────────────────────────────────
+
+const SEV_TO_SYSLOG = { CRITICAL: 2, HIGH: 4, MEDIUM: 5, LOW: 6, OK: 7 };
+
+function buildSyslogMsg(cfg, severity, msg) {
+  const pri = (cfg.facility * 8) + (SEV_TO_SYSLOG[severity] ?? 6);
+  const ts  = new Date().toUTCString().replace(/GMT$/, '').trim();
+  const tag = cfg.tag || 'AIVERTO-AUDIT';
+  return `<${pri}>${ts} ${tag}: ${msg}`;
+}
+
+function buildCefMsg(cfg, ev) {
+  const pri = (cfg.facility * 8) + (SEV_TO_SYSLOG[ev.severity] ?? 6);
+  const ts  = new Date().toUTCString().replace(/GMT$/, '').trim();
+  const sevNum = { CRITICAL: 10, HIGH: 8, MEDIUM: 5, LOW: 3 }[ev.severity] ?? 1;
+  const ext = [
+    `src=${ev.src||''}`,
+    `dst=${ev.dst||''}`,
+    `spt=0`,
+    `app=${ev.service||''}`,
+    `act=${ev.action||''}`,
+    `cnt=${ev.hits||0}`,
+    `msg=${(ev.flags||'').replace(/\|/g,'\\|')}`,
+    `flexString1=${ev.name||''}`,
+    `flexString1Label=RuleName`,
+  ].join(' ');
+  const cef = `CEF:0|CheckPoint|Firewall-Audit|1.0|${ev.ruleNum}|${ev.name||'Rule '+ev.ruleNum}|${sevNum}|${ext}`;
+  return `<${pri}>${ts} ${cfg.tag||'AIVERTO-AUDIT'}: ${cef}`;
+}
+
+function buildJsonMsg(cfg, ev) {
+  const pri = (cfg.facility * 8) + (SEV_TO_SYSLOG[ev.severity] ?? 6);
+  const ts  = new Date().toUTCString().replace(/GMT$/, '').trim();
+  const payload = JSON.stringify({ timestamp: new Date().toISOString(), severity: ev.severity, ...ev });
+  return `<${pri}>${ts} ${cfg.tag||'AIVERTO-AUDIT'}: ${payload}`;
+}
+
+function sendMsgToCollector(cfg, msg) {
+  return new Promise((resolve, reject) => {
+    const buf = Buffer.from(msg + '\n');
+    if (cfg.proto === 'tcp') {
+      const sock = net.createConnection({ host: cfg.host, port: cfg.port }, () => {
+        sock.write(buf);
+        sock.end();
+      });
+      sock.setTimeout(4000);
+      sock.on('close', resolve);
+      sock.on('error', reject);
+      sock.on('timeout', () => { sock.destroy(); reject(new Error('TCP timeout')); });
+    } else {
+      const client = dgram.createSocket('udp4');
+      client.send(buf, 0, buf.length, cfg.port, cfg.host, err => {
+        client.close();
+        err ? reject(err) : resolve();
+      });
+    }
+  });
+}
+
+/** POST /api/log-test — send a single test syslog message */
+app.post('/api/log-test', async (req, res) => {
+  const { host, port = 514, proto = 'udp', format = 'syslog', facility = 20, tag = 'AIVERTO-AUDIT' } = req.body;
+  if (!host) return res.status(400).json({ error: 'host is required' });
+  const cfg = { host, port, proto, format, facility, tag };
+  const msg = buildSyslogMsg(cfg, 'LOW', 'AIVERTO-AUDIT connectivity test — OK');
+  try {
+    await sendMsgToCollector(cfg, msg);
+    res.json({ message: `Test message sent to ${host}:${port} [${proto.toUpperCase()}]` });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+/** POST /api/log-send — send all audit events */
+app.post('/api/log-send', async (req, res) => {
+  const { host, port = 514, proto = 'udp', format = 'cef', facility = 20, tag = 'AIVERTO-AUDIT', events = [] } = req.body;
+  if (!host) return res.status(400).json({ error: 'host is required' });
+  const cfg = { host, port, proto, format, facility, tag };
+  let sent = 0, failed = 0;
+  for (const ev of events) {
+    let msg;
+    if (format === 'cef')    msg = buildCefMsg(cfg, ev);
+    else if (format === 'json') msg = buildJsonMsg(cfg, ev);
+    else                     msg = buildSyslogMsg(cfg, ev.severity, `rule="${ev.name}" flags="${ev.flags}" src="${ev.src}" dst="${ev.dst}" svc="${ev.service}" action="${ev.action}" hits=${ev.hits}`);
+    try { await sendMsgToCollector(cfg, msg); sent++; }
+    catch { failed++; }
+  }
+  res.json({ sent, failed });
 });
 
 // ─── start ───────────────────────────────────────────────────────────────────
