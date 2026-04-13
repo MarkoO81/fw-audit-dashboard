@@ -180,6 +180,30 @@
   .pagination button.active{background:var(--accent);border-color:var(--accent);}
   .pagination span{color:var(--text-dim);font-size:12px;}
 
+  /* ── Topology ── */
+  .topo-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px;}
+  .topo-toolbar select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:7px 12px;font-size:13px;outline:none;}
+  .topo-toolbar select:focus{border-color:var(--accent);}
+  .topo-canvas-wrap{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;position:relative;}
+  #topo-svg{width:100%;display:block;cursor:grab;}
+  #topo-svg:active{cursor:grabbing;}
+  .topo-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text-dim);}
+  .topo-legend span{display:flex;align-items:center;gap:5px;}
+  .topo-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;}
+  .topo-tooltip{position:fixed;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;font-size:12px;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100;max-width:280px;line-height:1.6;}
+  .topo-tooltip strong{display:block;margin-bottom:4px;color:var(--text);}
+  .topo-empty{padding:60px;text-align:center;color:var(--text-dim);}
+  .iface-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:14px;}
+  .iface-table th{background:var(--surface2);color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.4px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);}
+  .iface-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+  .iface-table tr:last-child td{border-bottom:none;}
+  .iface-table tr:hover td{background:var(--surface2);}
+  .topo-type{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;}
+  .topo-type.external{background:rgba(255,77,77,.15);color:var(--critical);}
+  .topo-type.internal{background:rgba(77,255,145,.12);color:var(--ok);}
+  .topo-type.dmz     {background:rgba(245,200,66,.15);color:var(--medium);}
+  .topo-type.unknown {background:var(--surface);color:var(--text-dim);}
+
   /* Progress */
   .progress-wrap{background:var(--surface2);border-radius:999px;height:6px;overflow:hidden;margin:10px 0;}
   .progress-bar{height:100%;background:var(--accent);border-radius:999px;transition:width .3s;}
@@ -303,6 +327,17 @@
         <strong style="color:var(--text)">NIS2 Directive Art. 21</strong> (security risk management measures) and
         <strong style="color:var(--text)">DORA Regulation Art. 9</strong> (ICT security policies, procedures, protocols and tools).
         100 = fully compliant, 0 = critical exposure.
+      </div>
+    </section>
+
+    <!-- ── TOPOLOGY ── -->
+    <section id="sec-topology">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px">
+        <h2 style="margin-bottom:0">Firewall Topology</h2>
+        <button class="sec" id="btn-load-topo" onclick="loadTopology()">Load Gateway Topology</button>
+      </div>
+      <div id="topo-content">
+        <div class="topo-empty">Click <strong>Load Gateway Topology</strong> to visualise firewall interfaces and zones.</div>
       </div>
     </section>
 
@@ -932,6 +967,274 @@ function loadSample() {
 }
 
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+// ════════════════════════════════════════════════════════════════
+// TOPOLOGY
+// ════════════════════════════════════════════════════════════════
+let topoGateways = [];
+let topoData     = null;   // currently rendered gateway topology
+
+async function loadTopology() {
+  const btn = document.getElementById('btn-load-topo');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Loading gateways…';
+  const wrap = document.getElementById('topo-content');
+  wrap.innerHTML = '<div class="topo-empty"><span class="spinner"></span> Fetching gateway objects…</div>';
+
+  try {
+    const res = await api('gateways', {});
+    topoGateways = res.gateways || [];
+    if (!topoGateways.length) {
+      wrap.innerHTML = '<div class="topo-empty">No gateways or clusters found. Check API permissions.</div>';
+      return;
+    }
+    renderGatewayPicker(topoGateways);
+    // auto-load first
+    await loadGatewayTopo(topoGateways[0].uid);
+  } catch(e) {
+    wrap.innerHTML = `<div class="topo-empty" style="color:var(--critical)">Failed to load gateways: ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Reload Topology';
+  }
+}
+
+function renderGatewayPicker(gws) {
+  const wrap = document.getElementById('topo-content');
+  wrap.innerHTML = `
+    <div class="topo-toolbar">
+      <label style="font-size:12px;color:var(--text-dim)">Gateway / Cluster:</label>
+      <select id="gw-select" onchange="loadGatewayTopo(this.value)">
+        ${gws.map(g=>`<option value="${esc(g.uid)}">${esc(g.name)} (${esc(g.type||'')})</option>`).join('')}
+      </select>
+    </div>
+    <div id="topo-diagram-wrap"></div>
+    <div class="topo-tooltip" id="topo-tt"></div>`;
+}
+
+async function loadGatewayTopo(uid) {
+  const wrap = document.getElementById('topo-diagram-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="topo-empty"><span class="spinner"></span> Fetching topology…</div>';
+  try {
+    topoData = await api('topology', { uid });
+    renderTopoDiagram(topoData);
+  } catch(e) {
+    wrap.innerHTML = `<div class="topo-empty" style="color:var(--critical)">Failed: ${esc(e.message)}</div>`;
+  }
+}
+
+// ── Colours per topology type ──────────────────────────────────
+const TOPO_COLOR = {
+  external: { fill:'rgba(255,77,77,.18)',  stroke:'#ff4d4d', text:'#ff4d4d',  label:'External' },
+  internal: { fill:'rgba(77,255,145,.14)', stroke:'#4dff91', text:'#4dff91',  label:'Internal' },
+  dmz:      { fill:'rgba(245,200,66,.18)', stroke:'#f5c842', text:'#f5c842',  label:'DMZ'      },
+  unknown:  { fill:'rgba(122,127,154,.15)',stroke:'#7a7f9a', text:'#7a7f9a',  label:'Unknown'  },
+};
+function topoColor(t) { return TOPO_COLOR[t] || TOPO_COLOR.unknown; }
+
+function renderTopoDiagram(gw) {
+  const ifaces = gw.interfaces || [];
+
+  // ── SVG layout constants ────────────────────────────────────
+  const W = 900, H = 420;
+  const CX = W / 2, CY = H / 2;
+  const FW_R = 48;          // firewall circle radius
+  const IFACE_R = 34;       // interface node radius
+  const ZONE_R  = 70;       // zone bubble radius
+  const ARM_LEN = 155;      // centre → interface distance
+
+  // Group interfaces by topology so same-type ones cluster together
+  const groups = {};
+  for (const iface of ifaces) {
+    const t = iface.topology || 'unknown';
+    if (!groups[t]) groups[t] = [];
+    groups[t].push(iface);
+  }
+  const groupKeys = Object.keys(groups);
+  const totalGroups = groupKeys.length || 1;
+
+  // Assign angles: spread groups evenly, interfaces within group fan slightly
+  const angleStep = (2 * Math.PI) / totalGroups;
+  const ifaceAngleSpan = Math.min(Math.PI * 0.4, (Math.PI * 0.7) / Math.max(...groupKeys.map(k => groups[k].length)));
+
+  const nodes = [];   // { iface, x, y, gx, gy, color, angle }
+
+  groupKeys.forEach((type, gi) => {
+    const groupAngle = gi * angleStep - Math.PI / 2;
+    const grpIfaces  = groups[type];
+    const col        = topoColor(type);
+
+    // zone bubble centre (further out)
+    const ZONE_DIST  = ARM_LEN + ZONE_R + 10;
+    const gx = CX + Math.cos(groupAngle) * ZONE_DIST;
+    const gy = CY + Math.sin(groupAngle) * ZONE_DIST;
+
+    grpIfaces.forEach((iface, ii) => {
+      const offset = grpIfaces.length > 1
+        ? (ii - (grpIfaces.length - 1) / 2) * ifaceAngleSpan
+        : 0;
+      const angle  = groupAngle + offset;
+      const x      = CX + Math.cos(angle) * ARM_LEN;
+      const y      = CY + Math.sin(angle) * ARM_LEN;
+      nodes.push({ iface, x, y, gx, gy, col, type, groupAngle, angle });
+    });
+  });
+
+  // ── Build SVG ────────────────────────────────────────────────
+  let svg = `<svg id="topo-svg" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L8,3 z" fill="#3e4260"/>
+    </marker>
+  </defs>`;
+
+  // Zone bubbles (background)
+  const drawnZones = new Set();
+  nodes.forEach(n => {
+    const key = n.type + ':' + n.iface.zone;
+    if (drawnZones.has(key)) return;
+    drawnZones.add(key);
+    svg += `<circle cx="${n.gx.toFixed(1)}" cy="${n.gy.toFixed(1)}" r="${ZONE_R}"
+      fill="${n.col.fill}" stroke="${n.col.stroke}" stroke-width="1.5" stroke-dasharray="6 3" opacity=".7"/>
+    <text x="${n.gx.toFixed(1)}" y="${(n.gy - ZONE_R + 14).toFixed(1)}"
+      text-anchor="middle" font-size="10" fill="${n.col.text}" font-weight="700" opacity=".9"
+    >${esc(n.iface.zone.toUpperCase())}</text>`;
+  });
+
+  // Arms from firewall to interface nodes
+  nodes.forEach(n => {
+    svg += `<line x1="${CX}" y1="${CY}" x2="${n.x.toFixed(1)}" y2="${n.y.toFixed(1)}"
+      stroke="#3e4260" stroke-width="1.5" marker-end="url(#arr)"/>`;
+  });
+
+  // Interface node circles
+  nodes.forEach((n, idx) => {
+    const antiColor = n.iface.antiSpoofing ? 'var(--ok)' : 'var(--critical)';
+    const antiIcon  = n.iface.antiSpoofing ? '✓' : '✗';
+    svg += `
+    <g class="topo-node" data-idx="${idx}" style="cursor:pointer"
+       onmouseenter="showTopoTip(event,${idx})" onmouseleave="hideTopoTip()">
+      <circle cx="${n.x.toFixed(1)}" cy="${n.y.toFixed(1)}" r="${IFACE_R}"
+        fill="${n.col.fill}" stroke="${n.col.stroke}" stroke-width="2" filter="url(#glow)"/>
+      <text x="${n.x.toFixed(1)}" y="${(n.y - 8).toFixed(1)}"
+        text-anchor="middle" font-size="9" fill="${n.col.text}" font-weight="700"
+      >${esc(n.iface.name)}</text>
+      <text x="${n.x.toFixed(1)}" y="${(n.y + 4).toFixed(1)}"
+        text-anchor="middle" font-size="8" fill="var(--text-dim)"
+      >${esc(n.iface.cidr || n.iface.ipv4 || '')}</text>
+      <text x="${n.x.toFixed(1)}" y="${(n.y + 15).toFixed(1)}"
+        text-anchor="middle" font-size="9" fill="${antiColor}" font-weight="700"
+        title="Anti-spoofing">${antiIcon} AS</text>
+    </g>`;
+  });
+
+  // Firewall node (centre)
+  const fwLabel = gw.name.length > 14 ? gw.name.slice(0, 13) + '…' : gw.name;
+  svg += `
+  <circle cx="${CX}" cy="${CY}" r="${FW_R}" fill="#232635" stroke="var(--accent)" stroke-width="3" filter="url(#glow)"/>
+  <svg x="${CX - 14}" y="${CY - 22}" width="28" height="28" viewBox="0 0 24 24" fill="none"
+    stroke="var(--accent)" stroke-width="1.8">
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    <polyline points="9 12 11 14 15 10"/>
+  </svg>
+  <text x="${CX}" y="${(CY + 30).toFixed(1)}" text-anchor="middle" font-size="10"
+    fill="var(--text)" font-weight="700">${esc(fwLabel)}</text>
+  <text x="${CX}" y="${(CY + 42).toFixed(1)}" text-anchor="middle" font-size="9"
+    fill="var(--text-dim)">${esc(gw.ipv4 || '')}</text>`;
+
+  svg += '</svg>';
+
+  // ── Legend ───────────────────────────────────────────────────
+  const legendHtml = Object.entries(TOPO_COLOR).map(([t, c]) =>
+    `<span><i style="background:${c.fill};border:1px solid ${c.stroke}"></i>${c.label}</span>`
+  ).join('') +
+    `<span><i style="background:rgba(77,255,145,.2);border:1px solid var(--ok)"></i>✓ Anti-spoofing ON</span>` +
+    `<span><i style="background:rgba(255,77,77,.2);border:1px solid var(--critical)"></i>✗ Anti-spoofing OFF</span>`;
+
+  // ── Interface detail table ───────────────────────────────────
+  const tableHtml = `
+  <div class="table-wrap" style="margin-top:18px">
+    <table class="iface-table">
+      <thead><tr>
+        <th>Interface</th><th>IP / CIDR</th><th>Topology</th><th>Zone</th>
+        <th>Anti-Spoofing</th><th>Networks Behind</th>
+      </tr></thead>
+      <tbody>${ifaces.map(iface => {
+        const col = topoColor(iface.topology);
+        const as  = iface.antiSpoofing;
+        return `<tr>
+          <td style="font-weight:600">${esc(iface.name)}</td>
+          <td style="font-family:monospace">${esc(iface.cidr || iface.ipv4 || '—')}</td>
+          <td><span class="topo-type ${esc(iface.topology)}">${esc(iface.topology||'unknown')}</span></td>
+          <td style="color:${col.text}">${esc(iface.zone)}</td>
+          <td style="color:${as?'var(--ok)':'var(--critical)'};font-weight:700">${as?'✓ Enabled':'✗ Disabled'}</td>
+          <td style="font-size:11px;color:var(--text-dim)">${esc(iface.networks.join(', ')||'—')}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`;
+
+  // gateway info bar
+  const infoBar = `<div style="display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text-dim);margin-bottom:12px">
+    <span><strong style="color:var(--text)">${esc(gw.name)}</strong></span>
+    ${gw.ipv4    ? `<span>IP: <strong style="color:var(--text)">${esc(gw.ipv4)}</strong></span>`    : ''}
+    ${gw.version ? `<span>OS: <strong style="color:var(--text)">${esc(gw.version)}</strong></span>` : ''}
+    ${gw.policy  ? `<span>Policy: <strong style="color:var(--text)">${esc(gw.policy)}</strong></span>` : ''}
+    <span>Interfaces: <strong style="color:var(--text)">${ifaces.length}</strong></span>
+  </div>`;
+
+  const diagramWrap = document.getElementById('topo-diagram-wrap');
+  diagramWrap.innerHTML = infoBar
+    + '<div class="topo-canvas-wrap">' + svg + '</div>'
+    + '<div class="topo-legend">' + legendHtml + '</div>'
+    + tableHtml;
+
+  // Store nodes for tooltip
+  diagramWrap._nodes = nodes;
+
+  // Pan/zoom via CSS transform
+  initTopoInteraction(diagramWrap.querySelector('#topo-svg'));
+}
+
+// ── Tooltip ───────────────────────────────────────────────────
+function showTopoTip(e, idx) {
+  const wrap = document.getElementById('topo-diagram-wrap');
+  const nodes = wrap._nodes;
+  if (!nodes || !nodes[idx]) return;
+  const n = nodes[idx];
+  const iface = n.iface;
+  const tt = document.getElementById('topo-tt');
+  tt.innerHTML = `<strong>${esc(iface.name)}</strong>
+    ${iface.cidr ? `<div>IP: <code>${esc(iface.cidr)}</code></div>` : ''}
+    <div>Topology: <span class="topo-type ${esc(iface.topology)}">${esc(iface.topology||'unknown')}</span></div>
+    <div>Zone: <strong>${esc(iface.zone)}</strong></div>
+    <div>Anti-Spoofing: <strong style="color:${iface.antiSpoofing?'var(--ok)':'var(--critical)'}">${iface.antiSpoofing?'✓ Enabled':'✗ Disabled'}</strong></div>
+    ${iface.networks.length ? `<div>Networks: ${esc(iface.networks.join(', '))}</div>` : ''}`;
+  tt.style.opacity = '1';
+  tt.style.left = (e.clientX + 14) + 'px';
+  tt.style.top  = (e.clientY - 10) + 'px';
+}
+function hideTopoTip() {
+  const tt = document.getElementById('topo-tt');
+  if (tt) tt.style.opacity = '0';
+}
+
+// ── Pan/zoom for SVG ─────────────────────────────────────────
+function initTopoInteraction(svg) {
+  let scale = 1, tx = 0, ty = 0, dragging = false, sx = 0, sy = 0;
+  const apply = () => svg.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  svg.addEventListener('wheel', e => {
+    e.preventDefault();
+    scale = Math.min(3, Math.max(0.4, scale * (e.deltaY < 0 ? 1.1 : 0.91)));
+    apply();
+  }, { passive: false });
+  svg.addEventListener('mousedown', e => { dragging=true; sx=e.clientX-tx; sy=e.clientY-ty; });
+  window.addEventListener('mousemove', e => { if (!dragging) return; tx=e.clientX-sx; ty=e.clientY-sy; apply(); });
+  window.addEventListener('mouseup', () => dragging=false);
+}
 </script>
 </body>
 </html>

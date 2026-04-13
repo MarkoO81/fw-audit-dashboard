@@ -259,6 +259,97 @@ app.post('/api/cp/domains', async (req, res) => {
   }
 });
 
+/** POST /api/cp/gateways
+ *  Returns all simple-gateway and simple-cluster objects with full detail.
+ */
+app.post('/api/cp/gateways', async (req, res) => {
+  const { server, port = 443, sid } = req.body;
+  const cp = cpClient(server, port);
+  try {
+    // fetch both gateways and clusters in parallel
+    const [gwResp, clResp] = await Promise.allSettled([
+      fetchAllPages(cp, sid, '/show-simple-gateways',  { 'details-level': 'full' }),
+      fetchAllPages(cp, sid, '/show-simple-clusters',   { 'details-level': 'full' }),
+    ]);
+    const gateways = [
+      ...(gwResp.status === 'fulfilled' ? gwResp.value : []),
+      ...(clResp.status === 'fulfilled' ? clResp.value : []),
+    ];
+    res.json({ gateways });
+  } catch (err) {
+    const msg  = err.response?.data?.message || err.message;
+    const code = err.response?.status        || 500;
+    res.status(code).json({ error: msg });
+  }
+});
+
+/** POST /api/cp/topology
+ *  Body: { server, port?, sid, uid }
+ *  Fetches a single gateway/cluster object by UID and normalises its
+ *  interface topology table into a clean structure for the diagram.
+ */
+app.post('/api/cp/topology', async (req, res) => {
+  const { server, port = 443, sid, uid } = req.body;
+  if (!uid) return res.status(400).json({ error: 'uid is required' });
+  const cp = cpClient(server, port);
+
+  // try gateway first, fall back to cluster
+  let raw = null;
+  for (const endpoint of ['/show-simple-gateway', '/show-simple-cluster']) {
+    try {
+      const r = await cp.post(endpoint, { uid, 'details-level': 'full' }, { headers: { 'X-chkp-sid': sid } });
+      raw = r.data;
+      break;
+    } catch (_) {}
+  }
+  if (!raw) return res.status(404).json({ error: 'Gateway not found' });
+
+  // Normalise interfaces
+  const ifaces = (raw.interfaces || []).map(iface => {
+    const topo    = (iface.topology || '').toLowerCase();           // internal|external|dmz|undefined
+    const ipv4    = iface['ipv4-address'] || iface['ipv6-address'] || '';
+    const mask    = iface['ipv4-mask-length'] ?? iface['subnet-mask'] ?? '';
+    const leads   = (iface['topology-settings']?.['ip-address-behind-this-interface'] || '').toLowerCase();
+
+    // zone name: explicit or derived from topology type
+    const zoneName = iface['security-zone-settings']?.['specific-zone-value']
+                  || iface['security-zone-settings']?.['specific-zone']
+                  || iface['topology-automatic-calculated']
+                  || topo || 'unknown';
+
+    // collect networks behind this interface
+    const nets = [];
+    if (iface['topology-settings']?.['specific-network']) {
+      const sn = iface['topology-settings']['specific-network'];
+      nets.push(typeof sn === 'object' ? (sn.name || sn.subnet || '') : sn);
+    }
+    if (ipv4 && mask !== '') nets.push(`${ipv4}/${mask}`);
+
+    return {
+      name:     iface.name || iface['interface-name'] || '?',
+      ipv4,
+      mask,
+      cidr:     ipv4 && mask !== '' ? `${ipv4}/${mask}` : '',
+      topology: topo || 'unknown',
+      zone:     typeof zoneName === 'object' ? (zoneName.name || 'unknown') : zoneName,
+      leads,
+      antiSpoofing: iface['anti-spoofing'] ?? false,
+      networks: nets.filter(Boolean),
+    };
+  });
+
+  res.json({
+    uid:       raw.uid,
+    name:      raw.name,
+    type:      raw.type,
+    ipv4:      raw['ipv4-address'] || '',
+    version:   raw['os-name'] || raw.version || '',
+    platform:  raw['hardware'] || '',
+    policy:    raw['policy']?.name || '',
+    interfaces: ifaces,
+  });
+});
+
 // ─── start ───────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n  FW Audit Dashboard running → http://localhost:${PORT}\n`);
