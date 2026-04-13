@@ -661,6 +661,12 @@
             <span id="lt-rx-label" style="font-size:12px;color:var(--text-dim)">Not listening</span>
           </div>
           <input id="lt-rx-port" type="number" value="5140" placeholder="UDP port" style="width:90px">
+          <select id="lt-interval" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;outline:none;">
+            <option value="30">Every 30s</option>
+            <option value="60" selected>Every 1 min</option>
+            <option value="120">Every 2 min</option>
+            <option value="300">Every 5 min</option>
+          </select>
           <button id="btn-lt-start" onclick="ltToggleListen()">Start Listener</button>
           <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
             <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
@@ -687,7 +693,7 @@
           <div class="lt-stat"><span id="lt-s-edges">0</span><small>Connections</small></div>
           <div class="lt-stat lt-allow"><span id="lt-s-allow">0</span><small>Allow</small></div>
           <div class="lt-stat lt-drop"><span id="lt-s-drop">0</span><small>Drop</small></div>
-          <div class="lt-stat"><span id="lt-s-eps">0</span><small>Events/s</small></div>
+          <div class="lt-stat"><span id="lt-s-eps">—</span><small>Evt/s</small></div>
         </div>
 
         <!-- Canvas -->
@@ -1538,16 +1544,18 @@ function ltToggleListen() {
 
 async function ltStartListen() {
   const port = parseInt(document.getElementById('lt-rx-port').value) || 5140;
+  const intervalSec = parseInt(document.getElementById('lt-interval').value) || 60;
   try {
     const r = await fetch('/api/syslog/start', {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ port }),
+      body: JSON.stringify({ port, intervalSec }),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || r.statusText);
     LT.listening = true;
+    LT.intervalSec = intervalSec;
     document.getElementById('lt-rx-dot').className = 'lt-status-dot listening';
-    document.getElementById('lt-rx-label').textContent = `Listening on UDP :${port}`;
+    document.getElementById('lt-rx-label').textContent = `UDP :${port} · snapshot every ${intervalSec}s`;
     document.getElementById('btn-lt-start').textContent = 'Stop Listener';
     document.getElementById('btn-lt-start').className = 'sec';
     ltConnectSSE();
@@ -1570,61 +1578,68 @@ function ltConnectSSE() {
   if (LT.sse) LT.sse.close();
   LT.sse = new EventSource('/api/syslog/stream');
   LT.sse.onmessage = e => {
-    const ev = JSON.parse(e.data);
-    ltIngestEvent(ev);
+    const payload = JSON.parse(e.data);
+    if (payload.type === 'snapshot') ltApplySnapshot(payload);
+    else if (payload.type === 'clear') ltClear();
   };
-  LT.sse.onerror = () => {
-    // auto-reconnect handled by browser
-  };
+  LT.sse.onerror = () => { /* browser auto-reconnects */ };
 }
 
-function ltIngestEvent(ev) {
-  if (!ev.src || !ev.dst) return;
+// Apply a full snapshot from the server — merge node positions from existing state
+function ltApplySnapshot(snap) {
   const now = Date.now();
-  ev.ts = ev.ts || now;
+  const W = LT.canvas?.width || 900, H = LT.canvas?.height || 500;
 
-  LT.totalEvents++;
-  LT.epsWindow.push(now);
-  // remove old EPS timestamps
-  while (LT.epsWindow.length && now - LT.epsWindow[0] > 5000) LT.epsWindow.shift();
-
-  const allow = /accept|allow|permit/i.test(ev.action||'');
-  if (allow) LT.allowCount++; else LT.dropCount++;
-
-  // Update node for SRC
-  if (!LT.nodes[ev.src]) {
-    LT.nodes[ev.src] = ltNewNode(ev.src);
+  // Merge nodes: preserve x/y/vx/vy for existing nodes so layout is stable
+  const newNodes = {};
+  for (const n of (snap.nodes || [])) {
+    const existing = LT.nodes[n.ip];
+    newNodes[n.ip] = {
+      ...n,
+      count: (n.allow||0) + (n.drop||0),
+      internal: isInternal(n.ip),
+      x: existing?.x ?? (W/2 + (Math.random()-0.5)*300),
+      y: existing?.y ?? (H/2 + (Math.random()-0.5)*200),
+      vx: existing?.vx ?? 0,
+      vy: existing?.vy ?? 0,
+    };
   }
-  LT.nodes[ev.src].count++;
-  if (allow) LT.nodes[ev.src].allow++; else LT.nodes[ev.src].drop++;
-  LT.nodes[ev.src].bytes += ev.bytes || 0;
-  LT.nodes[ev.src].lastSeen = now;
+  LT.nodes = newNodes;
 
-  // Update node for DST
-  if (!LT.nodes[ev.dst]) {
-    LT.nodes[ev.dst] = ltNewNode(ev.dst);
+  // Edges — rebuild from snapshot
+  const newEdges = {};
+  for (const e of (snap.edges || [])) {
+    newEdges[e.src+'→'+e.dst] = { ...e, count: (e.allow||0)+(e.drop||0) };
   }
-  LT.nodes[ev.dst].count++;
-  LT.nodes[ev.dst].lastSeen = now;
+  LT.edges = newEdges;
 
-  // Update edge
-  const ekey = ev.src + '→' + ev.dst;
-  if (!LT.edges[ekey]) {
-    LT.edges[ekey] = { src:ev.src, dst:ev.dst, count:0, allow:0, drop:0, service:'', lastSeen:0 };
-  }
-  LT.edges[ekey].count++;
-  if (allow) LT.edges[ekey].allow++; else LT.edges[ekey].drop++;
-  LT.edges[ekey].service = ev.service || LT.edges[ekey].service;
-  LT.edges[ekey].lastSeen = now;
+  LT.eventLog = snap.recentEvents || [];
+  LT.totalEvents = snap.totalEvents || 0;
+  LT.allowCount = snap.nodes?.reduce((s,n)=>s+(n.allow||0),0) || 0;
+  LT.dropCount  = snap.nodes?.reduce((s,n)=>s+(n.drop||0),0) || 0;
 
-  // Event log (keep last 200)
-  LT.eventLog.unshift({ ts:now, src:ev.src, dst:ev.dst, action:ev.action, service:ev.service, bytes:ev.bytes });
-  if (LT.eventLog.length > 200) LT.eventLog.pop();
-
+  // Show countdown to next snapshot
+  ltStartCountdown();
   ltUpdateStats();
   ltUpdateEventLog();
-  document.getElementById('lt-overlay')?.classList.add('hidden');
-  document.getElementById('btn-lt-export').disabled = false;
+  if (Object.keys(LT.nodes).length) {
+    document.getElementById('lt-overlay')?.classList.add('hidden');
+    document.getElementById('btn-lt-export').disabled = false;
+  }
+}
+
+let _ltCountdownId = null;
+function ltStartCountdown() {
+  if (_ltCountdownId) clearInterval(_ltCountdownId);
+  let remaining = LT.intervalSec || 60;
+  const label = document.getElementById('lt-rx-label');
+  const port = document.getElementById('lt-rx-port').value;
+  _ltCountdownId = setInterval(() => {
+    remaining--;
+    if (remaining <= 0) { remaining = LT.intervalSec || 60; }
+    if (LT.listening) label.textContent = `UDP :${port} · next snapshot in ${remaining}s`;
+    else { clearInterval(_ltCountdownId); _ltCountdownId = null; }
+  }, 1000);
 }
 
 function ltNewNode(ip) {
@@ -1637,13 +1652,11 @@ function ltNewNode(ip) {
   };
 }
 
-function ltApplyWindow() {
-  // prune old edges/nodes from display (doesn't delete from LT.events)
-  ltUpdateStats();
-}
+function ltApplyWindow() { ltUpdateStats(); }
 
 function ltClear() {
-  LT.events=[]; LT.nodes={}; LT.edges={}; LT.eventLog=[];
+  fetch('/api/syslog/clear', { method:'POST' }).catch(()=>{});
+  LT.nodes={}; LT.edges={}; LT.eventLog=[];
   LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.epsWindow=[];
   ltUpdateStats();
   ltUpdateEventLog();
@@ -1652,18 +1665,14 @@ function ltClear() {
 }
 
 function ltUpdateStats() {
-  const winSec = parseInt(document.getElementById('lt-window')?.value)||300;
-  const cutoff = winSec ? Date.now() - winSec*1000 : 0;
-  const visNodes = Object.values(LT.nodes).filter(n=>!cutoff||n.lastSeen>cutoff);
-  const visEdges = Object.values(LT.edges).filter(e=>!cutoff||e.lastSeen>cutoff);
-  const eps = (LT.epsWindow.length / Math.min(5, (Date.now() - (LT.epsWindow[0]||Date.now()))/1000 || 1)).toFixed(1);
+  const nodes = ltVisibleNodes();
+  const edges = ltVisibleEdges();
   document.getElementById('lt-s-total').textContent = LT.totalEvents;
-  document.getElementById('lt-s-nodes').textContent = visNodes.length;
-  document.getElementById('lt-s-edges').textContent = visEdges.length;
+  document.getElementById('lt-s-nodes').textContent = nodes.length;
+  document.getElementById('lt-s-edges').textContent = edges.length;
   document.getElementById('lt-s-allow').textContent = LT.allowCount;
   document.getElementById('lt-s-drop').textContent = LT.dropCount;
-  document.getElementById('lt-s-eps').textContent = eps;
-  // badge
+  document.getElementById('lt-s-eps').textContent = '—';
   document.getElementById('tb-livetraffic').textContent = LT.listening ? '●' : '○';
   document.getElementById('tb-livetraffic').style.color = LT.listening ? 'var(--ok)' : '';
 }

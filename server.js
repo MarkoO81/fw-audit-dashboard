@@ -602,17 +602,86 @@ function pushRawLog(line) {
   if (rawLogRing.length > 100) rawLogRing.shift();
 }
 
-function broadcastSSE(event) {
-  const data = `data: ${JSON.stringify(event)}\n\n`;
+// ── Aggregated traffic state (accumulates between snapshots) ─────────────────
+const traffic = {
+  nodes: {},   // ip → { ip, allow, drop, bytes, lastSeen }
+  edges: {},   // "src→dst" → { src, dst, allow, drop, service, lastSeen }
+  recentEvents: [],  // last 200 parsed events for event-log table
+  totalEvents: 0,
+  snapshotInterval: null,
+  SNAPSHOT_MS: 60_000,
+};
+
+function trafficIngest(ev) {
+  const now = ev.ts;
+  traffic.totalEvents++;
+
+  const allow = /accept|allow|permit/i.test(ev.action);
+
+  // Node: src
+  const sn = traffic.nodes[ev.src] || (traffic.nodes[ev.src] = { ip: ev.src, allow: 0, drop: 0, bytes: 0, lastSeen: 0 });
+  allow ? sn.allow++ : sn.drop++;
+  sn.bytes += ev.bytes || 0;
+  sn.lastSeen = now;
+
+  // Node: dst
+  const dn = traffic.nodes[ev.dst] || (traffic.nodes[ev.dst] = { ip: ev.dst, allow: 0, drop: 0, bytes: 0, lastSeen: 0 });
+  allow ? dn.allow++ : dn.drop++;
+  dn.lastSeen = now;
+
+  // Edge
+  const ekey = ev.src + '→' + ev.dst;
+  const edge = traffic.edges[ekey] || (traffic.edges[ekey] = { src: ev.src, dst: ev.dst, allow: 0, drop: 0, service: '', lastSeen: 0 });
+  allow ? edge.allow++ : edge.drop++;
+  if (ev.service) edge.service = ev.service;
+  edge.lastSeen = now;
+
+  // Recent events ring
+  traffic.recentEvents.unshift({ ts: now, src: ev.src, dst: ev.dst, action: ev.action, service: ev.service, bytes: ev.bytes });
+  if (traffic.recentEvents.length > 200) traffic.recentEvents.pop();
+}
+
+function buildSnapshot() {
+  return {
+    type: 'snapshot',
+    ts: Date.now(),
+    totalEvents: traffic.totalEvents,
+    nodes: Object.values(traffic.nodes),
+    edges: Object.values(traffic.edges),
+    recentEvents: traffic.recentEvents.slice(0, 200),
+  };
+}
+
+function broadcastSSE(payload) {
+  const data = `data: ${JSON.stringify(payload)}\n\n`;
   for (const res of sseClients) {
     try { res.write(data); }
     catch { sseClients.delete(res); }
   }
 }
 
+function startSnapshotTimer() {
+  if (traffic.snapshotInterval) return;
+  traffic.snapshotInterval = setInterval(() => {
+    if (sseClients.size > 0) {
+      broadcastSSE(buildSnapshot());
+      console.log(`[syslog] snapshot sent — ${Object.keys(traffic.nodes).length} nodes, ${Object.keys(traffic.edges).length} edges`);
+    }
+  }, traffic.SNAPSHOT_MS);
+}
+
+function stopSnapshotTimer() {
+  if (traffic.snapshotInterval) {
+    clearInterval(traffic.snapshotInterval);
+    traffic.snapshotInterval = null;
+  }
+}
+
 /** POST /api/syslog/start — start UDP syslog listener */
 app.post('/api/syslog/start', (req, res) => {
   const port = parseInt(req.body.port) || 5140;
+  const intervalSec = parseInt(req.body.intervalSec) || 60;
+  traffic.SNAPSHOT_MS = intervalSec * 1000;
 
   if (syslogSocket) {
     try { syslogSocket.close(); } catch {}
@@ -624,13 +693,9 @@ app.post('/api/syslog/start', (req, res) => {
   syslogSocket.on('message', (msg) => {
     const raw = msg.toString('utf8').trim();
     pushRawLog(raw);
-    console.log('[syslog] raw:', raw.slice(0, 200));
     const event = parseSyslogEvent(raw);
     if (event) {
-      console.log('[syslog] parsed:', JSON.stringify(event));
-      broadcastSSE(event);
-    } else {
-      console.log('[syslog] no src/dst extracted — check /api/syslog/rawlog');
+      trafficIngest(event);
     }
   });
 
@@ -640,8 +705,9 @@ app.post('/api/syslog/start', (req, res) => {
   });
 
   syslogSocket.bind(port, '0.0.0.0', () => {
-    console.log(`[syslog] listening on UDP :${port}`);
-    res.json({ ok: true, port });
+    console.log(`[syslog] listening on UDP :${port}, snapshot every ${intervalSec}s`);
+    startSnapshotTimer();
+    res.json({ ok: true, port, intervalSec });
   });
 
   syslogSocket.on('error', (err) => {
@@ -655,19 +721,36 @@ app.post('/api/syslog/stop', (_req, res) => {
     try { syslogSocket.close(); } catch {}
     syslogSocket = null;
   }
+  stopSnapshotTimer();
   res.json({ ok: true });
 });
 
-/** GET /api/syslog/stream — SSE endpoint for live events */
+/** POST /api/syslog/clear — reset all accumulated traffic data */
+app.post('/api/syslog/clear', (_req, res) => {
+  traffic.nodes = {};
+  traffic.edges = {};
+  traffic.recentEvents = [];
+  traffic.totalEvents = 0;
+  broadcastSSE({ type: 'clear' });
+  res.json({ ok: true });
+});
+
+/** GET /api/syslog/stream — SSE endpoint; sends current snapshot on connect, then periodic updates */
 app.get('/api/syslog/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-  res.write(': connected\n\n');
+  // Send current state immediately on connect
+  res.write(`data: ${JSON.stringify(buildSnapshot())}\n\n`);
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
+});
+
+/** GET /api/syslog/snapshot — one-shot JSON snapshot (for polling fallback) */
+app.get('/api/syslog/snapshot', (_req, res) => {
+  res.json(buildSnapshot());
 });
 
 /** GET /api/syslog/rawlog — last 100 raw lines for debugging */
