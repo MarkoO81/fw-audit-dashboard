@@ -532,43 +532,51 @@ const sseClients = new Set();
 
 const IP_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
-/** Parse a syslog/CEF/CP-native message and extract src/dst/action/service/bytes.
- *  Handles:
- *   - CEF:0|...|ext  (ArcSight CEF)
- *   - CP native:  ...field1:val1;field2:val2;...  OR  key=value pairs
- *   - Leef/generic key=value
+/** Parse a CP R80/R81/R82 syslog message.
+ *
+ *  CP R82 format (RFC5424 + structured data block):
+ *    <134>1 2026-04-13T18:40:32Z host CheckPoint pid - [key:"value"; key:"value"; ...]
+ *
+ *  Also handles CEF:0|...|ext and plain key=value fallback.
  */
 function parseSyslogEvent(raw) {
   const kv = {};
 
-  // ── CEF format ──────────────────────────────────────────────
+  // ── CP R8x native: key:"value"; inside [...] ────────────────
+  // Matches:  fieldname:"value"  or  fieldname:value  (with optional quotes)
+  const cpRe = /\b(\w+):"([^"]*)"/g;
+  let m;
+  while ((m = cpRe.exec(raw)) !== null) kv[m[1].toLowerCase()] = m[2];
+
+  // Also match unquoted values:  fieldname:value;
+  const cpRe2 = /\b(\w+):([^";{}\[\]\s]+)/g;
+  while ((m = cpRe2.exec(raw)) !== null) {
+    const k = m[1].toLowerCase();
+    if (!kv[k]) kv[k] = m[2];
+  }
+
+  // ── CEF format fallback ──────────────────────────────────────
   const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/s);
   if (cefM) {
     const extRe = /(\w+)=((?:[^\s\\]|\\.)*)/g;
     let em;
-    while ((em = extRe.exec(cefM[3])) !== null) kv[em[1].toLowerCase()] = em[2];
+    while ((em = extRe.exec(cefM[3])) !== null) {
+      const k = em[1].toLowerCase();
+      if (!kv[k]) kv[k] = em[2];
+    }
     if (!kv.action) kv.action = cefM[1] || '';
   }
 
-  // ── Generic key=value (CP syslog, Leef, etc.) ───────────────
-  // CP R80+ native: src=1.2.3.4 dst=5.6.7.8 proto=6 ...
-  const kvRe = /\b(src|dst|action|service|proto|app|s_port|d_port|bytes|product|orig|xlatesrc|xlatedst|rule_name|rule_uid|i\/f_dir|conn_direction)\s*=\s*([^\s;|,\]]+)/gi;
-  let m;
+  // ── key=value fallback (other vendors) ──────────────────────
+  const kvRe = /\b(src|dst|action|service|proto|app|bytes|origin|orig)\s*=\s*([^\s;|,\]]+)/gi;
   while ((m = kvRe.exec(raw)) !== null) {
-    const key = m[1].toLowerCase().replace(/\//g,'_');
-    if (!kv[key]) kv[key] = m[2];
+    const k = m[1].toLowerCase();
+    if (!kv[k]) kv[k] = m[2];
   }
 
-  // ── CP semicolon style: field:value; ────────────────────────
-  // e.g.  "src:10.0.0.1; dst:8.8.8.8; action:accept;"
-  const scRe = /\b(src|dst|action|service|proto|product|orig|bytes)\s*:\s*([^\s;,]+)/gi;
-  while ((m = scRe.exec(raw)) !== null) {
-    const key = m[1].toLowerCase();
-    if (!kv[key]) kv[key] = m[2];
-  }
-
-  // ── Resolve src / dst using aliases ─────────────────────────
-  const src = kv.src || kv.orig || kv.xlatesrc;
+  // ── Resolve src / dst ────────────────────────────────────────
+  // CP uses "src" and "dst" field names directly
+  const src = kv.src || kv.orig || kv.origin || kv.xlatesrc;
   const dst = kv.dst || kv.xlatedst;
 
   if (!src || !dst) return null;
@@ -578,10 +586,11 @@ function parseSyslogEvent(raw) {
     ts:      Date.now(),
     src,
     dst,
-    action:  kv.action || kv.conn_direction || 'unknown',
-    service: kv.service || kv.app || kv.proto || '',
+    action:  kv.action || 'unknown',
+    service: kv.service || kv.app || kv.appi_name || kv.proto || '',
     bytes:   parseInt(kv.bytes) || 0,
     product: kv.product || '',
+    rule:    kv.rule_name || kv.rule_uid || '',
     raw:     raw.slice(0, 400),
   };
 }
