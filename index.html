@@ -319,6 +319,44 @@
   .lc-log .err{color:var(--critical);}
   .lc-log .info{color:var(--low);}
   .lc-log .warn{color:var(--medium);}
+
+  /* ── Live Traffic ── */
+  .lt-config-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px 14px;
+    background:var(--surface);border:1px solid var(--border);border-radius:8px;}
+  .lt-config-bar input[type=number]{background:var(--surface2);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:6px 10px;font-size:13px;outline:none;}
+  .lt-config-bar input[type=number]:focus{border-color:var(--accent);}
+  .lt-status-dot{width:9px;height:9px;border-radius:50%;background:var(--border);transition:background .3s;}
+  .lt-status-dot.listening{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:ltPulse 1.5s ease-in-out infinite;}
+  @keyframes ltPulse{0%,100%{box-shadow:0 0 4px var(--ok);}50%{box-shadow:0 0 12px var(--ok);}}
+  .lt-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+  .lt-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;
+    text-align:center;display:flex;flex-direction:column;gap:2px;}
+  .lt-stat span{font-size:20px;font-weight:700;color:var(--text);}
+  .lt-stat small{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);}
+  .lt-stat.lt-allow span{color:var(--ok);}
+  .lt-stat.lt-drop span{color:var(--critical);}
+  .lt-canvas-wrap{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    overflow:hidden;height:520px;user-select:none;}
+  .lt-canvas-wrap canvas{display:block;width:100%;height:100%;cursor:grab;}
+  .lt-canvas-wrap canvas:active{cursor:grabbing;}
+  .lt-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:var(--text-dim);text-align:center;pointer-events:none;padding:40px;transition:opacity .3s;}
+  .lt-overlay.hidden{opacity:0;}
+  .lt-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:var(--text-dim);align-items:center;}
+  .lt-legend span{display:flex;align-items:center;gap:5px;}
+  .lt-legend i{display:inline-block;width:12px;height:12px;border-radius:2px;}
+  .lt-event-log{background:var(--surface2);border:1px solid var(--border);border-radius:8px;
+    max-height:200px;overflow-y:auto;font-family:monospace;font-size:11px;line-height:1.7;}
+  .lt-event-row{padding:4px 12px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center;white-space:nowrap;overflow:hidden;}
+  .lt-event-row:last-child{border-bottom:none;}
+  .lt-event-row:hover{background:rgba(108,123,255,.05);}
+  .lt-ev-time{color:var(--text-dim);flex-shrink:0;}
+  .lt-ev-allow{color:var(--ok);font-weight:700;flex-shrink:0;}
+  .lt-ev-drop{color:var(--critical);font-weight:700;flex-shrink:0;}
+  .lt-ev-src{color:var(--low);}
+  .lt-ev-dst{color:var(--medium);}
+  .lt-ev-svc{color:var(--text-dim);}
 </style>
 </head>
 <body>
@@ -443,8 +481,8 @@
       <button class="tab-btn" onclick="switchTab('netdiscovery')" id="tbtn-netdiscovery">
         ⊙ Network Discovery
       </button>
-      <button class="tab-btn" onclick="switchTab('logcollector')" id="tbtn-logcollector">
-        ⇢ Log Collector
+      <button class="tab-btn" onclick="switchTab('livetraffic')" id="tbtn-livetraffic">
+        ◎ Live Traffic <span class="tbadge" id="tb-livetraffic">●</span>
       </button>
     </nav>
 
@@ -612,72 +650,102 @@
       </section>
     </div>
 
-    <!-- ══ LOG COLLECTOR ══ -->
-    <div class="tab-pane" id="tab-logcollector">
+    <!-- ══ LIVE TRAFFIC ══ -->
+    <div class="tab-pane" id="tab-livetraffic">
       <section>
-        <h2>Log Collector — Forward Audit Events via Syslog / CEF</h2>
-
-        <div class="lc-panel">
-          <h3>Collector Configuration</h3>
-          <div class="lc-row">
-            <div class="lc-field" style="flex:2">
-              <label>Collector Host / IP</label>
-              <input id="lc-host" type="text" placeholder="192.168.1.10 or siem.company.com">
-            </div>
-            <div class="lc-field" style="flex:0 0 100px">
-              <label>Port</label>
-              <input id="lc-port" type="number" value="514">
-            </div>
-            <div class="lc-field" style="flex:0 0 100px">
-              <label>Protocol</label>
-              <select id="lc-proto">
-                <option value="udp">UDP</option>
-                <option value="tcp">TCP</option>
-              </select>
-            </div>
-            <div class="lc-field" style="flex:0 0 130px">
-              <label>Format</label>
-              <select id="lc-format">
-                <option value="cef">CEF (ArcSight)</option>
-                <option value="syslog">Syslog RFC3164</option>
-                <option value="json">JSON</option>
-              </select>
-            </div>
+        <!-- Receiver config bar -->
+        <div class="lt-config-bar" id="lt-config-bar">
+          <span style="font-size:12px;font-weight:700;color:var(--text-dim);white-space:nowrap">Syslog Receiver</span>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span class="lt-status-dot" id="lt-rx-dot"></span>
+            <span id="lt-rx-label" style="font-size:12px;color:var(--text-dim)">Not listening</span>
           </div>
-          <div class="lc-row">
-            <div class="lc-field">
-              <label>Facility</label>
-              <select id="lc-facility">
-                <option value="16">Local0</option>
-                <option value="17">Local1</option>
-                <option value="18">Local2</option>
-                <option value="20" selected>Local4</option>
-                <option value="23">Local7</option>
-              </select>
-            </div>
-            <div class="lc-field">
-              <label>Source Tag</label>
-              <input id="lc-tag" type="text" value="AIVERTO-AUDIT">
-            </div>
+          <input id="lt-rx-port" type="number" value="5140" placeholder="UDP port" style="width:90px">
+          <button id="btn-lt-start" onclick="ltToggleListen()">Start Listener</button>
+          <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+            <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
+              <input type="checkbox" id="lt-show-drop" checked onchange="ltRedraw()"> Show Drops
+            </label>
+            <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
+              <input type="checkbox" id="lt-labels" checked onchange="ltRedraw()"> Labels
+            </label>
+            <select id="lt-window" onchange="ltApplyWindow()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;outline:none;">
+              <option value="60">Last 1 min</option>
+              <option value="300" selected>Last 5 min</option>
+              <option value="900">Last 15 min</option>
+              <option value="3600">Last 1 hr</option>
+              <option value="0">All</option>
+            </select>
+            <button class="sec" onclick="ltClear()">Clear</button>
           </div>
-          <div class="btn-row">
-            <button id="btn-lc-test" onclick="testCollector()">Test Connection</button>
-            <button class="sec" id="btn-lc-send" onclick="sendAuditLog()" disabled>Send Audit Report</button>
-            <button class="sec" onclick="saveCollectorConfig()">Save Config</button>
-          </div>
-          <div class="lc-log" id="lc-log"><span class="info">// Log output will appear here…</span></div>
         </div>
 
-        <div class="lc-panel">
-          <h3>What gets sent</h3>
-          <ul style="font-size:13px;color:var(--text-dim);line-height:2;padding-left:18px;">
-            <li><strong style="color:var(--text)">Test message</strong> — sends a single syslog ping to verify connectivity</li>
-            <li><strong style="color:var(--text)">Audit Report</strong> — sends one event per flagged rule (Critical/High/Medium/Low)</li>
-            <li>Each event includes: rule name, severity, flags, source, destination, service, action, hit count</li>
-            <li>CEF format includes DeviceVendor=CheckPoint, DeviceProduct=Firewall-Audit</li>
-            <li>Syslog severity maps: Critical→2, High→4, Medium→5, Low→6</li>
-          </ul>
+        <!-- Stats bar -->
+        <div class="lt-stats" id="lt-stats">
+          <div class="lt-stat"><span id="lt-s-total">0</span><small>Events</small></div>
+          <div class="lt-stat"><span id="lt-s-nodes">0</span><small>Devices</small></div>
+          <div class="lt-stat"><span id="lt-s-edges">0</span><small>Connections</small></div>
+          <div class="lt-stat lt-allow"><span id="lt-s-allow">0</span><small>Allow</small></div>
+          <div class="lt-stat lt-drop"><span id="lt-s-drop">0</span><small>Drop</small></div>
+          <div class="lt-stat"><span id="lt-s-eps">0</span><small>Events/s</small></div>
         </div>
+
+        <!-- Canvas -->
+        <div class="lt-canvas-wrap" id="lt-canvas-wrap">
+          <canvas id="lt-canvas"></canvas>
+          <div class="lt-overlay" id="lt-overlay">
+            <div style="font-size:32px;margin-bottom:12px;opacity:.4">◎</div>
+            <div style="font-weight:700;margin-bottom:6px">Live Traffic Map</div>
+            <div style="font-size:12px;color:var(--text-dim)">Start the syslog listener, then point your firewall to this host on the configured UDP port.<br>
+            Parsed connections will appear here as a live force-directed graph.</div>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="lt-legend">
+          <span><i style="background:rgba(77,255,145,.5);border:1px solid #4dff91"></i>Allow</span>
+          <span><i style="background:rgba(255,77,77,.5);border:1px solid #ff4d4d"></i>Drop / Reject</span>
+          <span><i style="background:rgba(77,166,255,.5);border:1px solid #4da6ff"></i>Internal IP</span>
+          <span><i style="background:rgba(245,200,66,.5);border:1px solid #f5c842"></i>External IP</span>
+          <span style="color:var(--text-dim);font-size:11px">Node size = activity level · Line thickness = connection count</span>
+        </div>
+
+        <!-- Tooltip -->
+        <div class="topo-tooltip" id="lt-tt"></div>
+
+        <!-- Event log -->
+        <div style="margin-top:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <h3 style="margin:0">Recent Events</h3>
+            <div class="btn-row">
+              <button class="sec" onclick="ltExportCSV()" id="btn-lt-export" disabled>Export CSV</button>
+            </div>
+          </div>
+          <div class="lt-event-log" id="lt-event-log"><span style="color:var(--text-dim);font-size:12px">No events yet…</span></div>
+        </div>
+
+        <!-- Forwarding panel (collapsible) -->
+        <details style="margin-top:20px">
+          <summary style="cursor:pointer;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;padding:8px 0;user-select:none">
+            ▸ Forward to SIEM / Log Collector
+          </summary>
+          <div class="lc-panel" style="margin-top:10px">
+            <div class="lc-row">
+              <div class="lc-field" style="flex:2"><label>Collector Host</label><input id="lc-host" type="text" placeholder="siem.company.com"></div>
+              <div class="lc-field" style="flex:0 0 90px"><label>Port</label><input id="lc-port" type="number" value="514"></div>
+              <div class="lc-field" style="flex:0 0 90px"><label>Protocol</label><select id="lc-proto"><option value="udp">UDP</option><option value="tcp">TCP</option></select></div>
+              <div class="lc-field" style="flex:0 0 130px"><label>Format</label><select id="lc-format"><option value="cef">CEF</option><option value="syslog">Syslog</option><option value="json">JSON</option></select></div>
+              <div class="lc-field" style="flex:0 0 100px"><label>Facility</label><select id="lc-facility"><option value="16">Local0</option><option value="17">Local1</option><option value="20" selected>Local4</option><option value="23">Local7</option></select></div>
+              <div class="lc-field"><label>Tag</label><input id="lc-tag" type="text" value="AIVERTO-AUDIT"></div>
+            </div>
+            <div class="btn-row">
+              <button onclick="testCollector()">Test</button>
+              <button class="sec" id="btn-lc-send" onclick="sendAuditLog()" disabled>Send Audit Report</button>
+              <button class="sec" onclick="saveCollectorConfig()">Save</button>
+            </div>
+            <div class="lc-log" id="lc-log"><span class="info">// Log output will appear here…</span></div>
+          </div>
+        </details>
       </section>
     </div>
 
@@ -1433,6 +1501,437 @@ function exportDiscoveryCSV() {
   a.href = URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
   a.download = 'network_discovery_'+new Date().toISOString().slice(0,10)+'.csv';
   a.click();
+}
+
+// ════════════════════════════════════════════════════════════════
+// LIVE TRAFFIC — force-directed graph from syslog events
+// ════════════════════════════════════════════════════════════════
+const LT = {
+  events: [],        // parsed log events
+  nodes: {},         // ip → {ip,x,y,vx,vy,count,allow,drop,bytes,lastSeen,internal}
+  edges: {},         // key → {src,dst,count,allow,drop,service,lastSeen}
+  eventLog: [],      // recent 200 events for the event log table
+  sse: null,
+  animId: null,
+  canvas: null,
+  ctx: null,
+  listening: false,
+  camX: 0, camY: 0, camScale: 1,
+  drag: false, dragNode: null, dragSX: 0, dragSY: 0,
+  hovNode: null,
+  totalEvents: 0, allowCount: 0, dropCount: 0,
+  epsWindow: [], // timestamps for EPS calc
+};
+
+const RFC1918 = [
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^127\./,
+];
+function isInternal(ip) { return RFC1918.some(r=>r.test(ip)); }
+
+function ltToggleListen() {
+  if (LT.listening) { ltStopListen(); } else { ltStartListen(); }
+}
+
+async function ltStartListen() {
+  const port = parseInt(document.getElementById('lt-rx-port').value) || 5140;
+  try {
+    const r = await fetch('/api/syslog/start', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ port }),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || r.statusText);
+    LT.listening = true;
+    document.getElementById('lt-rx-dot').className = 'lt-status-dot listening';
+    document.getElementById('lt-rx-label').textContent = `Listening on UDP :${port}`;
+    document.getElementById('btn-lt-start').textContent = 'Stop Listener';
+    document.getElementById('btn-lt-start').className = 'sec';
+    ltConnectSSE();
+  } catch(e) {
+    document.getElementById('lt-rx-label').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function ltStopListen() {
+  try { await fetch('/api/syslog/stop', { method:'POST' }); } catch {}
+  LT.listening = false;
+  if (LT.sse) { LT.sse.close(); LT.sse = null; }
+  document.getElementById('lt-rx-dot').className = 'lt-status-dot';
+  document.getElementById('lt-rx-label').textContent = 'Not listening';
+  document.getElementById('btn-lt-start').textContent = 'Start Listener';
+  document.getElementById('btn-lt-start').className = '';
+}
+
+function ltConnectSSE() {
+  if (LT.sse) LT.sse.close();
+  LT.sse = new EventSource('/api/syslog/stream');
+  LT.sse.onmessage = e => {
+    const ev = JSON.parse(e.data);
+    ltIngestEvent(ev);
+  };
+  LT.sse.onerror = () => {
+    // auto-reconnect handled by browser
+  };
+}
+
+function ltIngestEvent(ev) {
+  if (!ev.src || !ev.dst) return;
+  const now = Date.now();
+  ev.ts = ev.ts || now;
+
+  LT.totalEvents++;
+  LT.epsWindow.push(now);
+  // remove old EPS timestamps
+  while (LT.epsWindow.length && now - LT.epsWindow[0] > 5000) LT.epsWindow.shift();
+
+  const allow = /accept|allow|permit/i.test(ev.action||'');
+  if (allow) LT.allowCount++; else LT.dropCount++;
+
+  // Update node for SRC
+  if (!LT.nodes[ev.src]) {
+    LT.nodes[ev.src] = ltNewNode(ev.src);
+  }
+  LT.nodes[ev.src].count++;
+  if (allow) LT.nodes[ev.src].allow++; else LT.nodes[ev.src].drop++;
+  LT.nodes[ev.src].bytes += ev.bytes || 0;
+  LT.nodes[ev.src].lastSeen = now;
+
+  // Update node for DST
+  if (!LT.nodes[ev.dst]) {
+    LT.nodes[ev.dst] = ltNewNode(ev.dst);
+  }
+  LT.nodes[ev.dst].count++;
+  LT.nodes[ev.dst].lastSeen = now;
+
+  // Update edge
+  const ekey = ev.src + '→' + ev.dst;
+  if (!LT.edges[ekey]) {
+    LT.edges[ekey] = { src:ev.src, dst:ev.dst, count:0, allow:0, drop:0, service:'', lastSeen:0 };
+  }
+  LT.edges[ekey].count++;
+  if (allow) LT.edges[ekey].allow++; else LT.edges[ekey].drop++;
+  LT.edges[ekey].service = ev.service || LT.edges[ekey].service;
+  LT.edges[ekey].lastSeen = now;
+
+  // Event log (keep last 200)
+  LT.eventLog.unshift({ ts:now, src:ev.src, dst:ev.dst, action:ev.action, service:ev.service, bytes:ev.bytes });
+  if (LT.eventLog.length > 200) LT.eventLog.pop();
+
+  ltUpdateStats();
+  ltUpdateEventLog();
+  document.getElementById('lt-overlay')?.classList.add('hidden');
+  document.getElementById('btn-lt-export').disabled = false;
+}
+
+function ltNewNode(ip) {
+  const W = LT.canvas?.width || 900, H = LT.canvas?.height || 500;
+  return {
+    ip, count:0, allow:0, drop:0, bytes:0, lastSeen:0, internal: isInternal(ip),
+    x: W/2 + (Math.random()-0.5)*300,
+    y: H/2 + (Math.random()-0.5)*200,
+    vx:0, vy:0,
+  };
+}
+
+function ltApplyWindow() {
+  // prune old edges/nodes from display (doesn't delete from LT.events)
+  ltUpdateStats();
+}
+
+function ltClear() {
+  LT.events=[]; LT.nodes={}; LT.edges={}; LT.eventLog=[];
+  LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.epsWindow=[];
+  ltUpdateStats();
+  ltUpdateEventLog();
+  document.getElementById('lt-overlay')?.classList.remove('hidden');
+  document.getElementById('btn-lt-export').disabled = true;
+}
+
+function ltUpdateStats() {
+  const winSec = parseInt(document.getElementById('lt-window')?.value)||300;
+  const cutoff = winSec ? Date.now() - winSec*1000 : 0;
+  const visNodes = Object.values(LT.nodes).filter(n=>!cutoff||n.lastSeen>cutoff);
+  const visEdges = Object.values(LT.edges).filter(e=>!cutoff||e.lastSeen>cutoff);
+  const eps = (LT.epsWindow.length / Math.min(5, (Date.now() - (LT.epsWindow[0]||Date.now()))/1000 || 1)).toFixed(1);
+  document.getElementById('lt-s-total').textContent = LT.totalEvents;
+  document.getElementById('lt-s-nodes').textContent = visNodes.length;
+  document.getElementById('lt-s-edges').textContent = visEdges.length;
+  document.getElementById('lt-s-allow').textContent = LT.allowCount;
+  document.getElementById('lt-s-drop').textContent = LT.dropCount;
+  document.getElementById('lt-s-eps').textContent = eps;
+  // badge
+  document.getElementById('tb-livetraffic').textContent = LT.listening ? '●' : '○';
+  document.getElementById('tb-livetraffic').style.color = LT.listening ? 'var(--ok)' : '';
+}
+
+function ltUpdateEventLog() {
+  const log = document.getElementById('lt-event-log');
+  if (!log) return;
+  if (!LT.eventLog.length) { log.innerHTML = '<span style="color:var(--text-dim);font-size:12px;padding:8px 12px;display:block">No events yet…</span>'; return; }
+  log.innerHTML = LT.eventLog.slice(0,60).map(ev => {
+    const allow = /accept|allow|permit/i.test(ev.action||'');
+    const t = new Date(ev.ts).toLocaleTimeString();
+    return `<div class="lt-event-row">
+      <span class="lt-ev-time">${t}</span>
+      <span class="${allow?'lt-ev-allow':'lt-ev-drop'}">${allow?'ALLOW':'DROP'}</span>
+      <span class="lt-ev-src">${esc(ev.src)}</span>
+      <span style="color:var(--text-dim)">→</span>
+      <span class="lt-ev-dst">${esc(ev.dst)}</span>
+      <span class="lt-ev-svc">${esc(ev.service||'')}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── Canvas rendering ──────────────────────────────────────────
+function ltInitCanvas() {
+  LT.canvas = document.getElementById('lt-canvas');
+  if (!LT.canvas) return;
+  LT.ctx = LT.canvas.getContext('2d');
+  ltResizeCanvas();
+  ltInitEvents();
+  if (LT.animId) cancelAnimationFrame(LT.animId);
+  ltAnimLoop();
+  new ResizeObserver(ltResizeCanvas).observe(LT.canvas.parentElement);
+}
+
+function ltResizeCanvas() {
+  if (!LT.canvas) return;
+  const wrap = LT.canvas.parentElement;
+  LT.canvas.width = wrap.clientWidth;
+  LT.canvas.height = wrap.clientHeight || 520;
+}
+
+function ltVisibleNodes() {
+  const winSec = parseInt(document.getElementById('lt-window')?.value)||300;
+  const cutoff = winSec ? Date.now() - winSec*1000 : 0;
+  return Object.values(LT.nodes).filter(n=>!cutoff||n.lastSeen>cutoff);
+}
+
+function ltVisibleEdges() {
+  const winSec = parseInt(document.getElementById('lt-window')?.value)||300;
+  const cutoff = winSec ? Date.now() - winSec*1000 : 0;
+  const showDrop = document.getElementById('lt-show-drop')?.checked ?? true;
+  return Object.values(LT.edges).filter(e => {
+    if (cutoff && e.lastSeen <= cutoff) return false;
+    if (!showDrop && e.allow === 0) return false;
+    return true;
+  });
+}
+
+// Simple force-directed layout tick
+function ltForceTick(nodes, edges) {
+  const W = LT.canvas.width, H = LT.canvas.height;
+  const REPEL = 3500, ATTRACT = 0.012, CENTER = 0.006, DAMP = 0.82;
+  const CENTER_X = W/2 + LT.camX/LT.camScale*0, CENTER_Y = H/2;
+
+  // Repulsion between all nodes
+  for (let i=0;i<nodes.length;i++) {
+    for (let j=i+1;j<nodes.length;j++) {
+      const a=nodes[i], b=nodes[j];
+      const dx=b.x-a.x, dy=b.y-a.y;
+      const d=Math.max(Math.hypot(dx,dy),1);
+      const f=REPEL/(d*d);
+      a.vx -= dx/d*f; a.vy -= dy/d*f;
+      b.vx += dx/d*f; b.vy += dy/d*f;
+    }
+    // Center pull
+    nodes[i].vx += (CENTER_X - nodes[i].x)*CENTER;
+    nodes[i].vy += (CENTER_Y - nodes[i].y)*CENTER;
+  }
+
+  // Edge attraction
+  const nodeMap = {};
+  nodes.forEach(n=>nodeMap[n.ip]=n);
+  for (const e of edges) {
+    const a=nodeMap[e.src], b=nodeMap[e.dst];
+    if (!a||!b) continue;
+    const dx=b.x-a.x, dy=b.y-a.y;
+    a.vx += dx*ATTRACT; a.vy += dy*ATTRACT;
+    b.vx -= dx*ATTRACT; b.vy -= dy*ATTRACT;
+  }
+
+  // Integrate + damp
+  for (const n of nodes) {
+    if (n === LT.dragNode) continue;
+    n.vx *= DAMP; n.vy *= DAMP;
+    n.x += n.vx; n.y += n.vy;
+    n.x = Math.max(30, Math.min(W-30, n.x));
+    n.y = Math.max(30, Math.min(H-30, n.y));
+  }
+}
+
+function ltNodeRadius(n) {
+  return Math.min(8 + Math.sqrt(n.count) * 2.5, 40);
+}
+
+function ltDraw() {
+  if (!LT.ctx) return;
+  const ctx = LT.ctx, W = LT.canvas.width, H = LT.canvas.height;
+  ctx.clearRect(0,0,W,H);
+
+  // Background grid
+  ctx.strokeStyle='rgba(46,50,80,0.3)'; ctx.lineWidth=0.5;
+  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  const nodes = ltVisibleNodes();
+  const edges = ltVisibleEdges();
+  const nodeMap = {}; nodes.forEach(n=>nodeMap[n.ip]=n);
+
+  ltForceTick(nodes, edges);
+
+  ctx.save();
+  ctx.translate(LT.camX, LT.camY);
+  ctx.scale(LT.camScale, LT.camScale);
+
+  const now = Date.now();
+
+  // Draw edges
+  for (const e of edges) {
+    const a=nodeMap[e.src], b=nodeMap[e.dst];
+    if (!a||!b) continue;
+    const age = Math.max(0, 1 - (now - e.lastSeen) / 30000);
+    const hasAllow = e.allow > 0, hasDrop = e.drop > 0;
+    const color = hasDrop && !hasAllow ? `rgba(255,77,77,${0.15+age*0.5})`
+                : hasAllow && hasDrop  ? `rgba(245,200,66,${0.15+age*0.5})`
+                :                        `rgba(77,255,145,${0.10+age*0.45})`;
+    const thick = Math.min(1 + Math.log10(e.count+1)*1.2, 5);
+    ctx.beginPath();
+    ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
+    ctx.strokeStyle=color; ctx.lineWidth=thick; ctx.stroke();
+
+    // Arrowhead at midpoint toward dst
+    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
+    const angle=Math.atan2(b.y-a.y,b.x-a.x);
+    ctx.save(); ctx.translate(mx,my); ctx.rotate(angle);
+    ctx.fillStyle=color; ctx.beginPath();
+    ctx.moveTo(5,0); ctx.lineTo(-4,4); ctx.lineTo(-4,-4); ctx.closePath(); ctx.fill();
+    ctx.restore();
+
+    // Animated flow dot
+    const t = ((now/1000 * 0.3) % 1);
+    const fx = a.x + (b.x-a.x)*t, fy = a.y + (b.y-a.y)*t;
+    ctx.beginPath(); ctx.arc(fx,fy,2.5,0,Math.PI*2);
+    ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=6;
+    ctx.fill(); ctx.shadowBlur=0;
+  }
+
+  // Draw nodes
+  const showLabels = document.getElementById('lt-labels')?.checked ?? true;
+  for (const n of nodes) {
+    const r = ltNodeRadius(n);
+    const hov = n === LT.hovNode;
+    const age = Math.max(0.2, 1 - (now - n.lastSeen) / 60000);
+    const isInt = n.internal;
+    const col = isInt ? '#4da6ff' : '#f5c842';
+    const dropRatio = n.count ? n.drop/n.count : 0;
+    const nodeCol = dropRatio > 0.5 ? '#ff4d4d' : dropRatio > 0.2 ? '#f5c842' : col;
+
+    ctx.shadowColor=nodeCol; ctx.shadowBlur=hov?24:12;
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+    const g=ctx.createRadialGradient(n.x,n.y-r*.3,1,n.x,n.y,r);
+    g.addColorStop(0,nodeCol.replace('#','rgba(').replace(/(..)(..)(..)/, (_,r,g,b)=>
+      `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${0.5*age})`));
+    g.addColorStop(1,nodeCol.replace('#','rgba(').replace(/(..)(..)(..)/, (_,r,g,b)=>
+      `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${0.08*age})`));
+    ctx.fillStyle=g; ctx.fill();
+    ctx.strokeStyle=nodeCol; ctx.lineWidth=hov?2.5:1.5; ctx.stroke();
+    ctx.shadowBlur=0;
+
+    if (showLabels) {
+      ctx.font=`${hov?'bold ':''}${Math.max(9,Math.min(11,r*0.5))}px monospace`;
+      ctx.fillStyle='#e2e4f0'; ctx.textAlign='center';
+      ctx.fillText(n.ip, n.x, n.y+r+12);
+      if (hov) {
+        ctx.font='9px sans-serif'; ctx.fillStyle='var(--text-dim)';
+        ctx.fillText(`${n.count} conn | ${n.allow}↑ ${n.drop}✗`, n.x, n.y+r+22);
+      }
+    }
+  }
+
+  ctx.restore();
+}
+
+function ltAnimLoop() {
+  ltDraw();
+  LT.animId = requestAnimationFrame(ltAnimLoop);
+}
+
+function ltRedraw() { /* opts changed, next frame picks up */ }
+
+function ltInitEvents() {
+  const c = LT.canvas;
+  c.addEventListener('wheel', e => {
+    e.preventDefault();
+    const f=e.deltaY<0?1.1:0.91, r=c.getBoundingClientRect();
+    const mx=e.clientX-r.left, my=e.clientY-r.top;
+    LT.camX=(1-f)*mx+LT.camX*f; LT.camY=(1-f)*my+LT.camY*f;
+    LT.camScale=Math.max(0.2,Math.min(4,LT.camScale*f));
+  }, { passive:false });
+
+  c.addEventListener('mousedown', e => {
+    const {x,y}=ltMousePos(e);
+    LT.dragNode = ltHitNode(x,y);
+    LT.drag=true; LT.dragSX=e.clientX-LT.camX; LT.dragSY=e.clientY-LT.camY;
+  });
+  c.addEventListener('mousemove', e => {
+    if (LT.drag && LT.dragNode) {
+      const {x,y}=ltMousePos(e);
+      LT.dragNode.x=x; LT.dragNode.y=y; LT.dragNode.vx=0; LT.dragNode.vy=0;
+    } else if (LT.drag) {
+      LT.camX=e.clientX-LT.dragSX; LT.camY=e.clientY-LT.dragSY;
+    }
+    const {x,y}=ltMousePos(e);
+    const prev=LT.hovNode;
+    LT.hovNode=ltHitNode(x,y);
+    if (LT.hovNode!==prev) ltShowTooltip(e,LT.hovNode);
+  });
+  c.addEventListener('mouseup', ()=>{ LT.drag=false; LT.dragNode=null; });
+  c.addEventListener('mouseleave', ()=>{ LT.drag=false; LT.dragNode=null; LT.hovNode=null; ltHideTooltip(); });
+}
+
+function ltMousePos(e) {
+  const r=LT.canvas.getBoundingClientRect();
+  return { x:(e.clientX-r.left-LT.camX)/LT.camScale, y:(e.clientY-r.top-LT.camY)/LT.camScale };
+}
+function ltHitNode(mx,my) {
+  return ltVisibleNodes().find(n=>Math.hypot(n.x-mx,n.y-my)<=ltNodeRadius(n)+4);
+}
+function ltShowTooltip(e, node) {
+  const tt=document.getElementById('lt-tt');
+  if (!tt) return;
+  if (!node) { tt.style.opacity='0'; return; }
+  const edgesFrom = Object.values(LT.edges).filter(e=>e.src===node.ip||e.dst===node.ip);
+  tt.innerHTML=`<strong>${esc(node.ip)}</strong>
+    <div>${node.internal?'Internal (RFC1918)':'External IP'}</div>
+    <div>Connections: <strong>${node.count}</strong> (Allow: ${node.allow} / Drop: ${node.drop})</div>
+    <div>Flows: <strong>${edgesFrom.length}</strong></div>
+    ${node.bytes?`<div>Bytes: <strong>${node.bytes.toLocaleString()}</strong></div>`:''}`;
+  tt.style.left=(e.clientX+14)+'px'; tt.style.top=(e.clientY-10)+'px'; tt.style.opacity='1';
+}
+function ltHideTooltip() { const tt=document.getElementById('lt-tt'); if(tt) tt.style.opacity='0'; }
+
+function ltExportCSV() {
+  const rows=[['time','src','dst','action','service','bytes'],...LT.eventLog.map(e=>[
+    new Date(e.ts).toISOString(),e.src,e.dst,e.action||'',e.service||'',e.bytes||0
+  ])];
+  const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='live_traffic_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click();
+}
+
+// Init canvas when switching to tab
+const _origSwitchTab = switchTab;
+function switchTab(name) {
+  _origSwitchTab(name);
+  if (name==='livetraffic' && !LT.canvas) {
+    setTimeout(ltInitCanvas, 50);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════

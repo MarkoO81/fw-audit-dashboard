@@ -520,6 +520,109 @@ app.post('/api/discover', async (req, res) => {
   }
 });
 
+// ─── syslog receiver (live traffic) ──────────────────────────────────────────
+
+let syslogSocket = null;
+const sseClients = new Set();
+
+/** Parse a syslog/CEF message and extract src/dst/action/service/bytes. */
+function parseSyslogEvent(raw) {
+  // Key=value pair extraction (Check Point syslog style)
+  const kv = {};
+  // First try CEF extension fields: key=value (value can be quoted or unquoted)
+  const kvRe = /\b(src|dst|action|service|proto|s_port|d_port|bytes|product|origin|rule_name|rule_uid)\s*=\s*([^\s|;]+)/gi;
+  let m;
+  while ((m = kvRe.exec(raw)) !== null) kv[m[1].toLowerCase()] = m[2];
+
+  // Also try CEF header: CEF:0|vendor|product|version|sig|name|sev|ext
+  const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/);
+  if (cefM) {
+    const extRaw = cefM[3] || '';
+    const extRe = /(\w+)=((?:[^\s\\]|\\.)*)/g;
+    let em;
+    while ((em = extRe.exec(extRaw)) !== null) kv[em[1].toLowerCase()] = em[2];
+    // CEF name as action fallback
+    if (!kv.action) kv.action = cefM[1] || '';
+  }
+
+  const src = kv.src;
+  const dst = kv.dst;
+  if (!src || !dst) return null;
+  if (!/^\d+\.\d+\.\d+\.\d+$/.test(src) || !/^\d+\.\d+\.\d+\.\d+$/.test(dst)) return null;
+
+  return {
+    ts:      Date.now(),
+    src,
+    dst,
+    action:  kv.action || 'unknown',
+    service: kv.service || kv.proto || '',
+    bytes:   parseInt(kv.bytes) || 0,
+    product: kv.product || '',
+    raw:     raw.slice(0, 300),
+  };
+}
+
+function broadcastSSE(event) {
+  const data = `data: ${JSON.stringify(event)}\n\n`;
+  for (const res of sseClients) {
+    try { res.write(data); }
+    catch { sseClients.delete(res); }
+  }
+}
+
+/** POST /api/syslog/start — start UDP syslog listener */
+app.post('/api/syslog/start', (req, res) => {
+  const port = parseInt(req.body.port) || 5140;
+
+  if (syslogSocket) {
+    try { syslogSocket.close(); } catch {}
+    syslogSocket = null;
+  }
+
+  syslogSocket = dgram.createSocket('udp4');
+
+  syslogSocket.on('message', (msg) => {
+    const raw = msg.toString('utf8');
+    const event = parseSyslogEvent(raw);
+    if (event) broadcastSSE(event);
+  });
+
+  syslogSocket.on('error', (err) => {
+    console.error('[syslog] error:', err.message);
+    syslogSocket = null;
+  });
+
+  syslogSocket.bind(port, '0.0.0.0', () => {
+    console.log(`[syslog] listening on UDP :${port}`);
+    res.json({ ok: true, port });
+  });
+
+  syslogSocket.on('error', (err) => {
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  });
+});
+
+/** POST /api/syslog/stop */
+app.post('/api/syslog/stop', (_req, res) => {
+  if (syslogSocket) {
+    try { syslogSocket.close(); } catch {}
+    syslogSocket = null;
+  }
+  res.json({ ok: true });
+});
+
+/** GET /api/syslog/stream — SSE endpoint for live events */
+app.get('/api/syslog/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+  res.write(': connected\n\n');
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
 // ─── log collector ────────────────────────────────────────────────────────────
 
 const SEV_TO_SYSLOG = { CRITICAL: 2, HIGH: 4, MEDIUM: 5, LOW: 6, OK: 7 };
