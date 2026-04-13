@@ -367,7 +367,16 @@ app.post('/api/cp/topology', async (req, res) => {
 
   // Normalise interfaces
   const ifaces = (raw.interfaces || []).map(iface => {
-    const topo    = (iface.topology || '').toLowerCase();           // internal|external|dmz|undefined
+    // topology can be a plain string ("internal","external","dmz")
+    // OR an object like { "leads-to": "internal", ... } on full Gaia objects
+    const topoRaw = iface.topology;
+    const topo = (
+      typeof topoRaw === 'string' ? topoRaw :
+      typeof topoRaw === 'object' && topoRaw !== null
+        ? (topoRaw['leads-to'] || topoRaw.name || topoRaw.type || Object.values(topoRaw).find(v => typeof v === 'string') || '')
+        : ''
+    ).toLowerCase();
+
     const ipv4    = iface['ipv4-address'] || iface['ipv6-address'] || '';
     const mask    = iface['ipv4-mask-length'] ?? iface['subnet-mask'] ?? '';
     const leads   = (iface['topology-settings']?.['ip-address-behind-this-interface'] || '').toLowerCase();
