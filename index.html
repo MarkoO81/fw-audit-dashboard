@@ -1047,6 +1047,7 @@ function switchTab(name) {
   document.getElementById('tab-'+name)?.classList.add('active');
   document.getElementById('tbtn-'+name)?.classList.add('active');
   if (name==='findings') renderFindings();
+  if (name==='livetraffic' && !LT.canvas) setTimeout(ltInitCanvas, 50);
 }
 
 /* ── Severity strip ── */
@@ -1925,14 +1926,7 @@ function ltExportCSV() {
   a.click();
 }
 
-// Init canvas when switching to tab
-const _origSwitchTab = switchTab;
-function switchTab(name) {
-  _origSwitchTab(name);
-  if (name==='livetraffic' && !LT.canvas) {
-    setTimeout(ltInitCanvas, 50);
-  }
-}
+// ltInitCanvas called from switchTab above
 
 // ════════════════════════════════════════════════════════════════
 // LOG COLLECTOR
