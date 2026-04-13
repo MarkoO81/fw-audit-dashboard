@@ -1149,10 +1149,19 @@ async function selectGw(idx) {
   expand.scrollIntoView({ behavior:'smooth', block:'nearest' });
 
   try {
-    topoData = await api('topology', { uid: gw.uid });
+    topoData = await api('topology', { uid: gw.uid, objectType: gw.type });
     renderTopoDiagram(topoData, expand);
   } catch(e) {
-    expand.innerHTML = `<div class="topo-empty" style="color:var(--critical)">Failed to load topology: ${esc(e.message)}</div>`;
+    expand.innerHTML = `<div class="topo-empty">
+      <div style="color:var(--critical);font-weight:600;margin-bottom:8px">Failed to load topology for ${esc(gw.name)}</div>
+      <div style="font-size:12px;color:var(--text-dim);margin-bottom:10px">${esc(e.message)}</div>
+      <div style="font-size:11px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:left;max-width:480px;margin:0 auto">
+        <strong style="color:var(--text)">Possible causes:</strong><br>
+        • Gateway type <strong>${esc(gw.type||'unknown')}</strong> may require additional API permissions<br>
+        • SMB / VSX gateways use different API endpoints<br>
+        • Check server logs: <code>docker logs fw-audit</code>
+      </div>
+    </div>`;
   }
 }
 

@@ -316,25 +316,45 @@ app.post('/api/cp/gateways', async (req, res) => {
 });
 
 /** POST /api/cp/topology
- *  Body: { server, port?, sid, uid }
+ *  Body: { server, port?, sid, uid, objectType? }
  *  Fetches a single gateway/cluster object by UID and normalises its
  *  interface topology table into a clean structure for the diagram.
  */
 app.post('/api/cp/topology', async (req, res) => {
-  const { server, port = 443, sid, uid } = req.body;
+  const { server, port = 443, sid, uid, objectType } = req.body;
   if (!uid) return res.status(400).json({ error: 'uid is required' });
   const cp = cpClient(server, port);
+  const headers = { 'X-chkp-sid': sid };
+  const errors = [];
 
-  // try gateway first, fall back to cluster
+  // Build ordered endpoint list — put the most-likely match first based on known object type
+  const isCluster = /cluster/i.test(objectType || '');
+  const endpoints = isCluster
+    ? ['/show-simple-cluster', '/show-simple-gateway', '/show-object']
+    : ['/show-simple-gateway', '/show-simple-cluster', '/show-object'];
+
   let raw = null;
-  for (const endpoint of ['/show-simple-gateway', '/show-simple-cluster']) {
+  for (const endpoint of endpoints) {
     try {
-      const r = await cp.post(endpoint, { uid, 'details-level': 'full' }, { headers: { 'X-chkp-sid': sid } });
-      raw = r.data;
-      break;
-    } catch (_) {}
+      const r = await cp.post(endpoint, { uid, 'details-level': 'full' }, { headers });
+      // show-object wraps result differently
+      raw = endpoint === '/show-object' ? r.data : r.data;
+      if (raw && raw.uid) break;
+      raw = null;
+    } catch (e) {
+      errors.push(`${endpoint}: ${e.response?.data?.message || e.message}`);
+    }
   }
-  if (!raw) return res.status(404).json({ error: 'Gateway not found' });
+
+  if (!raw || !raw.uid) {
+    console.error(`[topology] All endpoints failed for uid=${uid}:`, errors);
+    return res.status(404).json({
+      error: `Could not fetch gateway object. Tried: ${endpoints.join(', ')}`,
+      details: errors,
+    });
+  }
+
+  console.log(`[topology] Loaded "${raw.name}" (type=${raw.type}) via uid=${uid}`);
 
   // Normalise interfaces
   const ifaces = (raw.interfaces || []).map(iface => {
@@ -380,6 +400,25 @@ app.post('/api/cp/topology', async (req, res) => {
     policy:    raw['policy']?.name || '',
     interfaces: ifaces,
   });
+});
+
+/** POST /api/cp/debug-gw
+ *  Returns the raw CP object for a given uid — useful for diagnosing
+ *  unknown gateway types. Hits /show-object which works for any type.
+ */
+app.post('/api/cp/debug-gw', async (req, res) => {
+  const { server, port = 443, sid, uid } = req.body;
+  if (!uid) return res.status(400).json({ error: 'uid is required' });
+  const cp = cpClient(server, port);
+  try {
+    const r = await cp.post('/show-object', { uid, 'details-level': 'full' }, { headers: { 'X-chkp-sid': sid } });
+    res.json(r.data);
+  } catch (err) {
+    res.status(err.response?.status || 500).json({
+      error: err.response?.data?.message || err.message,
+      details: err.response?.data,
+    });
+  }
 });
 
 // ─── start ───────────────────────────────────────────────────────────────────
