@@ -19,6 +19,7 @@ const path           = require('path');
 const { execFile }   = require('child_process');
 const dgram          = require('dgram');
 const net            = require('net');
+const Database       = require('better-sqlite3');
 
 const app  = express();
 const PORT = process.env.PORT || 3737;
@@ -525,75 +526,81 @@ app.post('/api/discover', async (req, res) => {
   }
 });
 
+// ─── SQLite traffic database ──────────────────────────────────────────────────
+
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'traffic.db');
+const db = new Database(DB_PATH);
+
+db.exec(`
+  PRAGMA journal_mode=WAL;
+
+  CREATE TABLE IF NOT EXISTS events (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       INTEGER NOT NULL,
+    src      TEXT NOT NULL,
+    dst      TEXT NOT NULL,
+    action   TEXT,
+    service  TEXT,
+    bytes    INTEGER DEFAULT 0,
+    allowed  INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS nodes (
+    ip       TEXT PRIMARY KEY,
+    allow_c  INTEGER DEFAULT 0,
+    drop_c   INTEGER DEFAULT 0,
+    bytes    INTEGER DEFAULT 0,
+    last_ts  INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS edges (
+    src      TEXT NOT NULL,
+    dst      TEXT NOT NULL,
+    allow_c  INTEGER DEFAULT 0,
+    drop_c   INTEGER DEFAULT 0,
+    service  TEXT DEFAULT '',
+    last_ts  INTEGER DEFAULT 0,
+    PRIMARY KEY(src, dst)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
+`);
+
+// Prepared statements for hot path (UDP handler)
+const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,bytes,allowed) VALUES(?,?,?,?,?,?,?)`);
+const stmtUpsertNode   = db.prepare(`
+  INSERT INTO nodes(ip,allow_c,drop_c,bytes,last_ts) VALUES(?,?,?,?,?)
+  ON CONFLICT(ip) DO UPDATE SET
+    allow_c = allow_c + excluded.allow_c,
+    drop_c  = drop_c  + excluded.drop_c,
+    bytes   = bytes   + excluded.bytes,
+    last_ts = MAX(last_ts, excluded.last_ts)
+`);
+const stmtUpsertEdge   = db.prepare(`
+  INSERT INTO edges(src,dst,allow_c,drop_c,service,last_ts) VALUES(?,?,?,?,?,?)
+  ON CONFLICT(src,dst) DO UPDATE SET
+    allow_c = allow_c + excluded.allow_c,
+    drop_c  = drop_c  + excluded.drop_c,
+    service = COALESCE(NULLIF(excluded.service,''), edges.service),
+    last_ts = MAX(last_ts, excluded.last_ts)
+`);
+
+// Wrap the three writes in a single transaction for speed
+const insertTraffic = db.transaction((ev, allowed) => {
+  const ts = ev.ts;
+  stmtInsertEvent.run(ts, ev.src, ev.dst, ev.action, ev.service||'', ev.bytes||0, allowed?1:0);
+  stmtUpsertNode.run(ev.src, allowed?1:0, allowed?0:1, ev.bytes||0, ts);
+  stmtUpsertNode.run(ev.dst, 0, 0, 0, ts);
+  stmtUpsertEdge.run(ev.src, ev.dst, allowed?1:0, allowed?0:1, ev.service||'', ts);
+});
+
 // ─── syslog receiver (live traffic) ──────────────────────────────────────────
 
 let syslogSocket = null;
 const sseClients = new Set();
+let ssePushInterval = null;
 
 const IP_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
-
-/** Parse a CP R80/R81/R82 syslog message.
- *
- *  CP R82 format (RFC5424 + structured data block):
- *    <134>1 2026-04-13T18:40:32Z host CheckPoint pid - [key:"value"; key:"value"; ...]
- *
- *  Also handles CEF:0|...|ext and plain key=value fallback.
- */
-function parseSyslogEvent(raw) {
-  const kv = {};
-
-  // ── CP R8x native: key:"value"; inside [...] ────────────────
-  // Matches:  fieldname:"value"  or  fieldname:value  (with optional quotes)
-  const cpRe = /\b(\w+):"([^"]*)"/g;
-  let m;
-  while ((m = cpRe.exec(raw)) !== null) kv[m[1].toLowerCase()] = m[2];
-
-  // Also match unquoted values:  fieldname:value;
-  const cpRe2 = /\b(\w+):([^";{}\[\]\s]+)/g;
-  while ((m = cpRe2.exec(raw)) !== null) {
-    const k = m[1].toLowerCase();
-    if (!kv[k]) kv[k] = m[2];
-  }
-
-  // ── CEF format fallback ──────────────────────────────────────
-  const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/s);
-  if (cefM) {
-    const extRe = /(\w+)=((?:[^\s\\]|\\.)*)/g;
-    let em;
-    while ((em = extRe.exec(cefM[3])) !== null) {
-      const k = em[1].toLowerCase();
-      if (!kv[k]) kv[k] = em[2];
-    }
-    if (!kv.action) kv.action = cefM[1] || '';
-  }
-
-  // ── key=value fallback (other vendors) ──────────────────────
-  const kvRe = /\b(src|dst|action|service|proto|app|bytes|origin|orig)\s*=\s*([^\s;|,\]]+)/gi;
-  while ((m = kvRe.exec(raw)) !== null) {
-    const k = m[1].toLowerCase();
-    if (!kv[k]) kv[k] = m[2];
-  }
-
-  // ── Resolve src / dst ────────────────────────────────────────
-  // CP uses "src" and "dst" field names directly
-  const src = kv.src || kv.orig || kv.origin || kv.xlatesrc;
-  const dst = kv.dst || kv.xlatedst;
-
-  if (!src || !dst) return null;
-  if (!IP_RE.test(src) || !IP_RE.test(dst)) return null;
-
-  return {
-    ts:      Date.now(),
-    src,
-    dst,
-    action:  kv.action || 'unknown',
-    service: kv.service || kv.app || kv.appi_name || kv.proto || '',
-    bytes:   parseInt(kv.bytes) || 0,
-    product: kv.product || '',
-    rule:    kv.rule_name || kv.rule_uid || '',
-    raw:     raw.slice(0, 400),
-  };
-}
 
 // Raw log ring-buffer for /api/syslog/rawlog debug endpoint (last 100 lines)
 const rawLogRing = [];
@@ -602,53 +609,61 @@ function pushRawLog(line) {
   if (rawLogRing.length > 100) rawLogRing.shift();
 }
 
-// ── Aggregated traffic state (accumulates between snapshots) ─────────────────
-const traffic = {
-  nodes: {},   // ip → { ip, allow, drop, bytes, lastSeen }
-  edges: {},   // "src→dst" → { src, dst, allow, drop, service, lastSeen }
-  recentEvents: [],  // last 200 parsed events for event-log table
-  totalEvents: 0,
-  snapshotInterval: null,
-  SNAPSHOT_MS: 60_000,
-};
+/** Parse a CP R80/R81/R82 syslog message — key:"value"; format */
+function parseSyslogEvent(raw) {
+  const kv = {};
+  let m;
 
-function trafficIngest(ev) {
-  const now = ev.ts;
-  traffic.totalEvents++;
+  // CP R8x native: key:"value";
+  const cpRe = /\b(\w+):"([^"]*)"/g;
+  while ((m = cpRe.exec(raw)) !== null) kv[m[1].toLowerCase()] = m[2];
 
-  const allow = /accept|allow|permit/i.test(ev.action);
+  // unquoted: key:value;
+  const cpRe2 = /\b(\w+):([^";{}\[\]\s]+)/g;
+  while ((m = cpRe2.exec(raw)) !== null) { const k=m[1].toLowerCase(); if(!kv[k]) kv[k]=m[2]; }
 
-  // Node: src
-  const sn = traffic.nodes[ev.src] || (traffic.nodes[ev.src] = { ip: ev.src, allow: 0, drop: 0, bytes: 0, lastSeen: 0 });
-  allow ? sn.allow++ : sn.drop++;
-  sn.bytes += ev.bytes || 0;
-  sn.lastSeen = now;
+  // CEF fallback
+  const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/s);
+  if (cefM) {
+    const extRe = /(\w+)=((?:[^\s\\]|\\.)*)/g;
+    let em;
+    while ((em = extRe.exec(cefM[3])) !== null) { const k=em[1].toLowerCase(); if(!kv[k]) kv[k]=em[2]; }
+    if (!kv.action) kv.action = cefM[1] || '';
+  }
 
-  // Node: dst
-  const dn = traffic.nodes[ev.dst] || (traffic.nodes[ev.dst] = { ip: ev.dst, allow: 0, drop: 0, bytes: 0, lastSeen: 0 });
-  allow ? dn.allow++ : dn.drop++;
-  dn.lastSeen = now;
+  // key=value fallback
+  const kvRe = /\b(src|dst|action|service|proto|app|bytes|origin|orig)\s*=\s*([^\s;|,\]]+)/gi;
+  while ((m = kvRe.exec(raw)) !== null) { const k=m[1].toLowerCase(); if(!kv[k]) kv[k]=m[2]; }
 
-  // Edge
-  const ekey = ev.src + '→' + ev.dst;
-  const edge = traffic.edges[ekey] || (traffic.edges[ekey] = { src: ev.src, dst: ev.dst, allow: 0, drop: 0, service: '', lastSeen: 0 });
-  allow ? edge.allow++ : edge.drop++;
-  if (ev.service) edge.service = ev.service;
-  edge.lastSeen = now;
+  const src = kv.src || kv.orig || kv.origin || kv.xlatesrc;
+  const dst = kv.dst || kv.xlatedst;
+  if (!src || !dst || !IP_RE.test(src) || !IP_RE.test(dst)) return null;
 
-  // Recent events ring
-  traffic.recentEvents.unshift({ ts: now, src: ev.src, dst: ev.dst, action: ev.action, service: ev.service, bytes: ev.bytes });
-  if (traffic.recentEvents.length > 200) traffic.recentEvents.pop();
+  return {
+    ts:      Date.now(),
+    src, dst,
+    action:  kv.action || 'unknown',
+    service: kv.service || kv.app || kv.appi_name || kv.proto || '',
+    bytes:   parseInt(kv.bytes) || 0,
+  };
 }
 
-function buildSnapshot() {
+function buildSnapshot(windowSec = 3600) {
+  const cutoff = windowSec ? Date.now() - windowSec * 1000 : 0;
+  const where  = cutoff ? 'WHERE last_ts >= ?' : '';
+  const args   = cutoff ? [cutoff] : [];
+
+  const nodes = db.prepare(`SELECT ip, allow_c, drop_c, bytes, last_ts FROM nodes ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 500`).all(...args);
+  const edges = db.prepare(`SELECT src, dst, allow_c, drop_c, service, last_ts FROM edges ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 2000`).all(...args);
+  const recent = db.prepare(`SELECT ts,src,dst,action,service,bytes FROM events ORDER BY ts DESC LIMIT 200`).all();
+  const total  = db.prepare(`SELECT COUNT(*) as c FROM events`).get().c;
+
   return {
-    type: 'snapshot',
-    ts: Date.now(),
-    totalEvents: traffic.totalEvents,
-    nodes: Object.values(traffic.nodes),
-    edges: Object.values(traffic.edges),
-    recentEvents: traffic.recentEvents.slice(0, 200),
+    type: 'snapshot', ts: Date.now(),
+    totalEvents: total,
+    nodes: nodes.map(n => ({ ip:n.ip, allow:n.allow_c, drop:n.drop_c, bytes:n.bytes, lastSeen:n.last_ts })),
+    edges: edges.map(e => ({ src:e.src, dst:e.dst, allow:e.allow_c, drop:e.drop_c, service:e.service, lastSeen:e.last_ts })),
+    recentEvents: recent,
   };
 }
 
@@ -660,100 +675,69 @@ function broadcastSSE(payload) {
   }
 }
 
-function startSnapshotTimer() {
-  if (traffic.snapshotInterval) return;
-  traffic.snapshotInterval = setInterval(() => {
-    if (sseClients.size > 0) {
-      broadcastSSE(buildSnapshot());
-      console.log(`[syslog] snapshot sent — ${Object.keys(traffic.nodes).length} nodes, ${Object.keys(traffic.edges).length} edges`);
-    }
-  }, traffic.SNAPSHOT_MS);
-}
-
-function stopSnapshotTimer() {
-  if (traffic.snapshotInterval) {
-    clearInterval(traffic.snapshotInterval);
-    traffic.snapshotInterval = null;
-  }
-}
-
-/** POST /api/syslog/start — start UDP syslog listener */
+/** POST /api/syslog/start — start UDP listener + 5s SSE push */
 app.post('/api/syslog/start', (req, res) => {
-  const port = parseInt(req.body.port) || 5140;
-  const intervalSec = parseInt(req.body.intervalSec) || 60;
-  traffic.SNAPSHOT_MS = intervalSec * 1000;
+  const port        = parseInt(req.body.port) || 5140;
+  const intervalSec = parseInt(req.body.intervalSec) || 5;
 
-  if (syslogSocket) {
-    try { syslogSocket.close(); } catch {}
-    syslogSocket = null;
-  }
+  if (syslogSocket) { try { syslogSocket.close(); } catch {} syslogSocket = null; }
+  if (ssePushInterval) { clearInterval(ssePushInterval); ssePushInterval = null; }
 
   syslogSocket = dgram.createSocket('udp4');
 
   syslogSocket.on('message', (msg) => {
     const raw = msg.toString('utf8').trim();
     pushRawLog(raw);
-    const event = parseSyslogEvent(raw);
-    if (event) {
-      trafficIngest(event);
-    }
+    const ev = parseSyslogEvent(raw);
+    if (ev) insertTraffic(ev, /accept|allow|permit/i.test(ev.action));
   });
 
-  syslogSocket.on('error', (err) => {
-    console.error('[syslog] error:', err.message);
-    syslogSocket = null;
-  });
+  syslogSocket.on('error', (err) => { console.error('[syslog] error:', err.message); });
 
   syslogSocket.bind(port, '0.0.0.0', () => {
-    console.log(`[syslog] listening on UDP :${port}, snapshot every ${intervalSec}s`);
-    startSnapshotTimer();
+    console.log(`[syslog] listening UDP :${port}, pushing every ${intervalSec}s`);
+    // Push snapshot to connected browsers every N seconds
+    ssePushInterval = setInterval(() => {
+      if (sseClients.size > 0) {
+        broadcastSSE(buildSnapshot());
+      }
+    }, intervalSec * 1000);
     res.json({ ok: true, port, intervalSec });
   });
 
-  syslogSocket.on('error', (err) => {
-    if (!res.headersSent) res.status(500).json({ error: err.message });
-  });
+  syslogSocket.on('error', (err) => { if (!res.headersSent) res.status(500).json({ error: err.message }); });
 });
 
 /** POST /api/syslog/stop */
 app.post('/api/syslog/stop', (_req, res) => {
-  if (syslogSocket) {
-    try { syslogSocket.close(); } catch {}
-    syslogSocket = null;
-  }
-  stopSnapshotTimer();
+  if (syslogSocket) { try { syslogSocket.close(); } catch {} syslogSocket = null; }
+  if (ssePushInterval) { clearInterval(ssePushInterval); ssePushInterval = null; }
   res.json({ ok: true });
 });
 
-/** POST /api/syslog/clear — reset all accumulated traffic data */
+/** POST /api/syslog/clear — wipe DB tables */
 app.post('/api/syslog/clear', (_req, res) => {
-  traffic.nodes = {};
-  traffic.edges = {};
-  traffic.recentEvents = [];
-  traffic.totalEvents = 0;
+  db.exec(`DELETE FROM events; DELETE FROM nodes; DELETE FROM edges;`);
   broadcastSSE({ type: 'clear' });
   res.json({ ok: true });
 });
 
-/** GET /api/syslog/stream — SSE endpoint; sends current snapshot on connect, then periodic updates */
+/** GET /api/syslog/stream — SSE; sends current snapshot immediately on connect */
 app.get('/api/syslog/stream', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
   res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
-  // Send current state immediately on connect
   res.write(`data: ${JSON.stringify(buildSnapshot())}\n\n`);
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
 });
 
-/** GET /api/syslog/snapshot — one-shot JSON snapshot (for polling fallback) */
-app.get('/api/syslog/snapshot', (_req, res) => {
-  res.json(buildSnapshot());
-});
+/** GET /api/syslog/snapshot */
+app.get('/api/syslog/snapshot', (_req, res) => res.json(buildSnapshot()));
 
-/** GET /api/syslog/rawlog — last 100 raw lines for debugging */
+/** GET /api/syslog/rawlog — last 100 raw UDP lines for debugging */
 app.get('/api/syslog/rawlog', (_req, res) => {
   res.json({ count: rawLogRing.length, logs: rawLogRing });
 });

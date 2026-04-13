@@ -6,7 +6,13 @@ services:
     restart: unless-stopped
     environment:
       - PORT=3737
+      - DB_PATH=/data/traffic.db
+    volumes:
+      - fw-audit-data:/data
     # host network: container shares the host's network stack directly.
     # Dashboard reachable at http://<host-ip>:3737
     # No ports mapping needed (and it would be ignored anyway).
     network_mode: host
+
+volumes:
+  fw-audit-data:

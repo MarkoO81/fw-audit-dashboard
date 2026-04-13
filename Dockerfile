@@ -1,5 +1,8 @@
 FROM node:22-alpine
 
+# better-sqlite3 requires native compilation
+RUN apk add --no-cache python3 make g++
+
 WORKDIR /app
 
 # Install dependencies first (layer cache)
