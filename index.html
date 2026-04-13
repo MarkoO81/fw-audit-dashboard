@@ -672,9 +672,6 @@
             <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
               <input type="checkbox" id="lt-show-drop" checked onchange="ltRedraw()"> Show Drops
             </label>
-            <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
-              <input type="checkbox" id="lt-labels" checked onchange="ltRedraw()"> Labels
-            </label>
             <select id="lt-window" onchange="ltApplyWindow()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;outline:none;">
               <option value="60">Last 1 min</option>
               <option value="300" selected>Last 5 min</option>
@@ -1773,8 +1770,9 @@ function ltForceTick(nodes, edges) {
   }
 }
 
+// Node radius: fixed base so IP text always fits, slight growth for high-activity nodes
 function ltNodeRadius(n) {
-  return Math.min(8 + Math.sqrt(n.count) * 2.5, 40);
+  return Math.min(32 + Math.sqrt((n.allow||0)+(n.drop||0)) * 1.2, 52);
 }
 
 function ltDraw() {
@@ -1782,10 +1780,10 @@ function ltDraw() {
   const ctx = LT.ctx, W = LT.canvas.width, H = LT.canvas.height;
   ctx.clearRect(0,0,W,H);
 
-  // Background grid
-  ctx.strokeStyle='rgba(46,50,80,0.3)'; ctx.lineWidth=0.5;
-  for(let x=0;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-  for(let y=0;y<H;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // Dark grid
+  ctx.strokeStyle='rgba(46,50,80,0.25)'; ctx.lineWidth=0.5;
+  for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
 
   const nodes = ltVisibleNodes();
   const edges = ltVisibleEdges();
@@ -1799,67 +1797,94 @@ function ltDraw() {
 
   const now = Date.now();
 
-  // Draw edges
+  // ── Draw edges (lines between circles) ───────────────────────
   for (const e of edges) {
-    const a=nodeMap[e.src], b=nodeMap[e.dst];
-    if (!a||!b) continue;
-    const age = Math.max(0, 1 - (now - e.lastSeen) / 30000);
-    const hasAllow = e.allow > 0, hasDrop = e.drop > 0;
-    const color = hasDrop && !hasAllow ? `rgba(255,77,77,${0.15+age*0.5})`
-                : hasAllow && hasDrop  ? `rgba(245,200,66,${0.15+age*0.5})`
-                :                        `rgba(77,255,145,${0.10+age*0.45})`;
-    const thick = Math.min(1 + Math.log10(e.count+1)*1.2, 5);
-    ctx.beginPath();
-    ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y);
-    ctx.strokeStyle=color; ctx.lineWidth=thick; ctx.stroke();
+    const a = nodeMap[e.src], b = nodeMap[e.dst];
+    if (!a || !b || a === b) continue;
+    const ra = ltNodeRadius(a), rb = ltNodeRadius(b);
 
-    // Arrowhead at midpoint toward dst
-    const mx=(a.x+b.x)/2, my=(a.y+b.y)/2;
-    const angle=Math.atan2(b.y-a.y,b.x-a.x);
-    ctx.save(); ctx.translate(mx,my); ctx.rotate(angle);
-    ctx.fillStyle=color; ctx.beginPath();
-    ctx.moveTo(5,0); ctx.lineTo(-4,4); ctx.lineTo(-4,-4); ctx.closePath(); ctx.fill();
+    // Direction vector, shorten to circle edge
+    const dx = b.x-a.x, dy = b.y-a.y;
+    const dist = Math.hypot(dx,dy) || 1;
+    const ux = dx/dist, uy = dy/dist;
+    const x1 = a.x + ux*ra, y1 = a.y + uy*ra;
+    const x2 = b.x - ux*(rb+8), y2 = b.y - uy*(rb+8); // +8 for arrowhead gap
+
+    const hasAllow = e.allow > 0, hasDrop = e.drop > 0;
+    const col = hasDrop && !hasAllow ? '#ff4d4d'
+              : hasAllow && hasDrop  ? '#f5c842'
+              :                        '#4dff91';
+    const alpha = 0.55;
+    const thick = Math.min(1.2 + Math.log10((e.allow||0)+(e.drop||0)+1)*1.5, 5);
+
+    // Line
+    ctx.beginPath();
+    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle = col + Math.round(alpha*255).toString(16).padStart(2,'0');
+    ctx.lineWidth = thick;
+    ctx.stroke();
+
+    // Arrowhead at dst end
+    const angle = Math.atan2(dy, dx);
+    ctx.save();
+    ctx.translate(x2, y2);
+    ctx.rotate(angle);
+    ctx.fillStyle = col;
+    ctx.globalAlpha = alpha + 0.2;
+    ctx.beginPath();
+    ctx.moveTo(8,0); ctx.lineTo(-5,4); ctx.lineTo(-5,-4); ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha = 1;
     ctx.restore();
 
-    // Animated flow dot
-    const t = ((now/1000 * 0.3) % 1);
-    const fx = a.x + (b.x-a.x)*t, fy = a.y + (b.y-a.y)*t;
-    ctx.beginPath(); ctx.arc(fx,fy,2.5,0,Math.PI*2);
-    ctx.fillStyle=color; ctx.shadowColor=color; ctx.shadowBlur=6;
-    ctx.fill(); ctx.shadowBlur=0;
+    // Count label on edge midpoint
+    if (e.allow+e.drop > 1) {
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      ctx.font='bold 9px monospace';
+      ctx.fillStyle='#e2e4f0';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.fillText(e.allow+e.drop, mx, my-7);
+    }
   }
 
-  // Draw nodes
-  const showLabels = document.getElementById('lt-labels')?.checked ?? true;
+  // ── Draw nodes (circles with IP inside) ──────────────────────
   for (const n of nodes) {
     const r = ltNodeRadius(n);
     const hov = n === LT.hovNode;
-    const age = Math.max(0.2, 1 - (now - n.lastSeen) / 60000);
-    const isInt = n.internal;
-    const col = isInt ? '#4da6ff' : '#f5c842';
-    const dropRatio = n.count ? n.drop/n.count : 0;
-    const nodeCol = dropRatio > 0.5 ? '#ff4d4d' : dropRatio > 0.2 ? '#f5c842' : col;
+    const count = (n.allow||0)+(n.drop||0);
+    const dropRatio = count ? (n.drop||0)/count : 0;
 
-    ctx.shadowColor=nodeCol; ctx.shadowBlur=hov?24:12;
-    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
-    const g=ctx.createRadialGradient(n.x,n.y-r*.3,1,n.x,n.y,r);
-    g.addColorStop(0,nodeCol.replace('#','rgba(').replace(/(..)(..)(..)/, (_,r,g,b)=>
-      `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${0.5*age})`));
-    g.addColorStop(1,nodeCol.replace('#','rgba(').replace(/(..)(..)(..)/, (_,r,g,b)=>
-      `${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)},${0.08*age})`));
-    ctx.fillStyle=g; ctx.fill();
-    ctx.strokeStyle=nodeCol; ctx.lineWidth=hov?2.5:1.5; ctx.stroke();
-    ctx.shadowBlur=0;
+    // Color: mostly drops = red, mixed = yellow, mostly allow = blue(int)/teal(ext)
+    const base = dropRatio > 0.6 ? '#ff4d4d'
+               : dropRatio > 0.25 ? '#f5c842'
+               : n.internal ? '#4da6ff' : '#4dff91';
 
-    if (showLabels) {
-      ctx.font=`${hov?'bold ':''}${Math.max(9,Math.min(11,r*0.5))}px monospace`;
-      ctx.fillStyle='#e2e4f0'; ctx.textAlign='center';
-      ctx.fillText(n.ip, n.x, n.y+r+12);
-      if (hov) {
-        ctx.font='9px sans-serif'; ctx.fillStyle='var(--text-dim)';
-        ctx.fillText(`${n.count} conn | ${n.allow}↑ ${n.drop}✗`, n.x, n.y+r+22);
-      }
+    // Outer glow on hover
+    if (hov) {
+      ctx.beginPath(); ctx.arc(n.x, n.y, r+6, 0, Math.PI*2);
+      ctx.strokeStyle = base + '55'; ctx.lineWidth = 4; ctx.stroke();
     }
+
+    // Circle fill
+    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
+    ctx.fillStyle = n.internal ? '#0d1525' : '#131a10';
+    ctx.fill();
+    ctx.strokeStyle = base;
+    ctx.lineWidth = hov ? 2.5 : 1.8;
+    ctx.stroke();
+
+    // IP address inside circle — always visible
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = base;
+    ctx.font = `bold ${Math.min(11, Math.max(9, r*0.28))}px monospace`;
+    ctx.fillText(n.ip, n.x, n.y - 4);
+
+    // Activity count below IP
+    ctx.font = `${Math.min(9, Math.max(7, r*0.22))}px sans-serif`;
+    ctx.fillStyle = '#7a7f9a';
+    ctx.fillText(`${n.allow||0}↑ ${n.drop||0}✗`, n.x, n.y + 9);
   }
 
   ctx.restore();
