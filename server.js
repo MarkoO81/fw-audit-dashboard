@@ -530,41 +530,67 @@ app.post('/api/discover', async (req, res) => {
 let syslogSocket = null;
 const sseClients = new Set();
 
-/** Parse a syslog/CEF message and extract src/dst/action/service/bytes. */
-function parseSyslogEvent(raw) {
-  // Key=value pair extraction (Check Point syslog style)
-  const kv = {};
-  // First try CEF extension fields: key=value (value can be quoted or unquoted)
-  const kvRe = /\b(src|dst|action|service|proto|s_port|d_port|bytes|product|origin|rule_name|rule_uid)\s*=\s*([^\s|;]+)/gi;
-  let m;
-  while ((m = kvRe.exec(raw)) !== null) kv[m[1].toLowerCase()] = m[2];
+const IP_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 
-  // Also try CEF header: CEF:0|vendor|product|version|sig|name|sev|ext
-  const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/);
+/** Parse a syslog/CEF/CP-native message and extract src/dst/action/service/bytes.
+ *  Handles:
+ *   - CEF:0|...|ext  (ArcSight CEF)
+ *   - CP native:  ...field1:val1;field2:val2;...  OR  key=value pairs
+ *   - Leef/generic key=value
+ */
+function parseSyslogEvent(raw) {
+  const kv = {};
+
+  // ── CEF format ──────────────────────────────────────────────
+  const cefM = raw.match(/CEF:\d+\|[^|]*\|[^|]*\|[^|]*\|[^|]*\|([^|]*)\|(\d+)\|(.*)/s);
   if (cefM) {
-    const extRaw = cefM[3] || '';
     const extRe = /(\w+)=((?:[^\s\\]|\\.)*)/g;
     let em;
-    while ((em = extRe.exec(extRaw)) !== null) kv[em[1].toLowerCase()] = em[2];
-    // CEF name as action fallback
+    while ((em = extRe.exec(cefM[3])) !== null) kv[em[1].toLowerCase()] = em[2];
     if (!kv.action) kv.action = cefM[1] || '';
   }
 
-  const src = kv.src;
-  const dst = kv.dst;
+  // ── Generic key=value (CP syslog, Leef, etc.) ───────────────
+  // CP R80+ native: src=1.2.3.4 dst=5.6.7.8 proto=6 ...
+  const kvRe = /\b(src|dst|action|service|proto|app|s_port|d_port|bytes|product|orig|xlatesrc|xlatedst|rule_name|rule_uid|i\/f_dir|conn_direction)\s*=\s*([^\s;|,\]]+)/gi;
+  let m;
+  while ((m = kvRe.exec(raw)) !== null) {
+    const key = m[1].toLowerCase().replace(/\//g,'_');
+    if (!kv[key]) kv[key] = m[2];
+  }
+
+  // ── CP semicolon style: field:value; ────────────────────────
+  // e.g.  "src:10.0.0.1; dst:8.8.8.8; action:accept;"
+  const scRe = /\b(src|dst|action|service|proto|product|orig|bytes)\s*:\s*([^\s;,]+)/gi;
+  while ((m = scRe.exec(raw)) !== null) {
+    const key = m[1].toLowerCase();
+    if (!kv[key]) kv[key] = m[2];
+  }
+
+  // ── Resolve src / dst using aliases ─────────────────────────
+  const src = kv.src || kv.orig || kv.xlatesrc;
+  const dst = kv.dst || kv.xlatedst;
+
   if (!src || !dst) return null;
-  if (!/^\d+\.\d+\.\d+\.\d+$/.test(src) || !/^\d+\.\d+\.\d+\.\d+$/.test(dst)) return null;
+  if (!IP_RE.test(src) || !IP_RE.test(dst)) return null;
 
   return {
     ts:      Date.now(),
     src,
     dst,
-    action:  kv.action || 'unknown',
-    service: kv.service || kv.proto || '',
+    action:  kv.action || kv.conn_direction || 'unknown',
+    service: kv.service || kv.app || kv.proto || '',
     bytes:   parseInt(kv.bytes) || 0,
     product: kv.product || '',
-    raw:     raw.slice(0, 300),
+    raw:     raw.slice(0, 400),
   };
+}
+
+// Raw log ring-buffer for /api/syslog/rawlog debug endpoint (last 100 lines)
+const rawLogRing = [];
+function pushRawLog(line) {
+  rawLogRing.push({ ts: Date.now(), line: line.slice(0, 500) });
+  if (rawLogRing.length > 100) rawLogRing.shift();
 }
 
 function broadcastSSE(event) {
@@ -587,9 +613,16 @@ app.post('/api/syslog/start', (req, res) => {
   syslogSocket = dgram.createSocket('udp4');
 
   syslogSocket.on('message', (msg) => {
-    const raw = msg.toString('utf8');
+    const raw = msg.toString('utf8').trim();
+    pushRawLog(raw);
+    console.log('[syslog] raw:', raw.slice(0, 200));
     const event = parseSyslogEvent(raw);
-    if (event) broadcastSSE(event);
+    if (event) {
+      console.log('[syslog] parsed:', JSON.stringify(event));
+      broadcastSSE(event);
+    } else {
+      console.log('[syslog] no src/dst extracted — check /api/syslog/rawlog');
+    }
   });
 
   syslogSocket.on('error', (err) => {
@@ -626,6 +659,11 @@ app.get('/api/syslog/stream', (req, res) => {
   res.write(': connected\n\n');
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
+});
+
+/** GET /api/syslog/rawlog — last 100 raw lines for debugging */
+app.get('/api/syslog/rawlog', (_req, res) => {
+  res.json({ count: rawLogRing.length, logs: rawLogRing });
 });
 
 // ─── log collector ────────────────────────────────────────────────────────────
