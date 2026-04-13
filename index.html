@@ -337,7 +337,7 @@
   .lt-stat.lt-allow span{color:var(--ok);}
   .lt-stat.lt-drop span{color:var(--critical);}
   .lt-canvas-wrap{position:relative;background:var(--surface);border:1px solid var(--border);border-radius:10px;
-    overflow:hidden;height:520px;user-select:none;}
+    overflow:hidden;height:calc(100vh - 320px);min-height:380px;user-select:none;}
   .lt-canvas-wrap canvas{display:block;width:100%;height:100%;cursor:grab;}
   .lt-canvas-wrap canvas:active{cursor:grabbing;}
   .lt-overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -662,10 +662,12 @@
           </div>
           <input id="lt-rx-port" type="number" value="5140" placeholder="UDP port" style="width:90px">
           <select id="lt-interval" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;outline:none;">
+            <option value="1">Every 1s</option>
+            <option value="2">Every 2s</option>
+            <option value="5" selected>Every 5s</option>
+            <option value="10">Every 10s</option>
             <option value="30">Every 30s</option>
-            <option value="60" selected>Every 1 min</option>
-            <option value="120">Every 2 min</option>
-            <option value="300">Every 5 min</option>
+            <option value="60">Every 1 min</option>
           </select>
           <button id="btn-lt-start" onclick="ltToggleListen()">Start Listener</button>
           <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
