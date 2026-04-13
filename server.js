@@ -88,18 +88,36 @@ function normaliseRule(rule, objDict = new Map()) {
   };
   const names = arr => (arr || []).map(resolve).filter(Boolean).join(', ');
   const action = resolve(rule.action);
+
+  // Hits: CP API returns either an integer (older) or an object with value/last-date/first-date/level
+  const h = rule.hits;
+  let hitCount = '', hitLevel = '', lastHit = '', firstHit = '';
+  if (h !== undefined && h !== null) {
+    if (typeof h === 'number') {
+      hitCount = h;
+    } else if (typeof h === 'object') {
+      hitCount  = h.value      ?? h.total ?? '';
+      hitLevel  = h.level      ?? '';                              // none|low|medium|high|very-high
+      lastHit   = h['last-date']?.['iso-8601']  || h['last-date']  || '';
+      firstHit  = h['first-date']?.['iso-8601'] || h['first-date'] || '';
+    }
+  }
+
   return {
-    name:     rule.name      || `rule-${rule['rule-number'] || rule.uid}`,
-    enabled:  rule.enabled !== false ? 'Yes' : 'No',
+    name:      rule.name      || `rule-${rule['rule-number'] || rule.uid}`,
+    rule_num:  rule['rule-number'] ?? '',
+    enabled:   rule.enabled !== false ? 'Yes' : 'No',
     action,
-    src_zone: names(rule['from-zone']),
-    src:      names(rule.source),
-    dst_zone: names(rule['to-zone']),
-    dst:      names(rule.destination),
-    service:  names(rule.service),
-    hits:     rule.hits?.value      ?? '',
-    last_hit: rule.hits?.['last-date']?.['iso-8601'] || rule.hits?.['last-date'] || '',
-    comment:  rule.comments         || rule.comment || '',
+    src_zone:  names(rule['from-zone']),
+    src:       names(rule.source),
+    dst_zone:  names(rule['to-zone']),
+    dst:       names(rule.destination),
+    service:   names(rule.service),
+    hits:      hitCount,
+    hit_level: hitLevel,
+    last_hit:  lastHit,
+    first_hit: firstHit,
+    comment:   rule.comments  || rule.comment || '',
   };
 }
 

@@ -762,17 +762,20 @@ function filterByFlag(flagId) {
 // TABLE
 // ════════════════════════════════════════════════════════════════
 const COLS=[
-  {key:'name',    lbl:'Rule Name'},
-  {key:'enabled', lbl:'Status'},
-  {key:'action',  lbl:'Action'},
-  {key:'src',     lbl:'Source'},
-  {key:'dst',     lbl:'Destination'},
-  {key:'service', lbl:'Service'},
-  {key:'hits',    lbl:'Hits'},
-  {key:'last_hit',lbl:'Last Hit'},
-  {key:'comment', lbl:'Comment'},
-  {key:'severity',lbl:'Severity'},
-  {key:'flags',   lbl:'Findings'},
+  {key:'rule_num', lbl:'#'},
+  {key:'name',     lbl:'Rule Name'},
+  {key:'enabled',  lbl:'Status'},
+  {key:'action',   lbl:'Action'},
+  {key:'src',      lbl:'Source'},
+  {key:'dst',      lbl:'Destination'},
+  {key:'service',  lbl:'Service'},
+  {key:'hits',     lbl:'Hit Count'},
+  {key:'hit_level',lbl:'Hit Level'},
+  {key:'first_hit',lbl:'First Hit'},
+  {key:'last_hit', lbl:'Last Hit'},
+  {key:'comment',  lbl:'Comment'},
+  {key:'severity', lbl:'Severity'},
+  {key:'flags',    lbl:'Findings'},
 ];
 
 function renderTableHeader() {
@@ -828,7 +831,13 @@ function cell(key,r) {
   if (key==='action')  return `<td class="${r.allow?'act-allow':r.deny?'act-deny':r.drop?'act-drop':''}">${esc(v)}</td>`;
   if (key==='src'||key==='dst') return `<td class="${isAny(v)?'val-any':''}" title="${esc(v)}">${esc(v)||'—'}</td>`;
   if (key==='service') return `<td class="${isAny(v)?'val-any':''}" title="${esc(v)}">${esc(v)||'—'}</td>`;
-  if (key==='hits')    return `<td class="${v!==''&&Number(v)===0?'val-zero':''}">${v===''?'—':esc(String(v))}</td>`;
+  if (key==='hits')      return `<td class="${v!==''&&Number(v)===0?'val-zero':''}" style="text-align:right;font-variant-numeric:tabular-nums">${v===''?'—':Number(v).toLocaleString()}</td>`;
+  if (key==='hit_level'){
+    const lvlCol={none:'var(--text-dim)',low:'var(--ok)',medium:'var(--medium)',high:'var(--high)','very-high':'var(--critical)'};
+    return `<td>${v?`<span style="color:${lvlCol[v]||'var(--text)'};font-weight:600;text-transform:capitalize">${v}</span>`:'—'}</td>`;
+  }
+  if (key==='first_hit') return `<td style="color:var(--text-dim);font-size:11px">${v||'—'}</td>`;
+  if (key==='rule_num')  return `<td style="color:var(--text-dim);font-size:11px;text-align:right">${v||'—'}</td>`;
   if (key==='severity')return `<td><span class="tag ${v}">${v}</span></td>`;
   if (key==='enabled') return `<td><span class="tag ${isDisabled(v)?'MEDIUM':'OK'}">${isDisabled(v)?'Disabled':'Enabled'}</span></td>`;
   if (key==='name')    return `<td title="${esc(String(v))}" style="font-weight:${isNoName(v)?'400':'600'};color:${isNoName(v)?'var(--text-dim)':'var(--text)'}">${esc(String(v))||'<em style="color:var(--text-dim)">unnamed</em>'}</td>`;
@@ -877,7 +886,7 @@ function backToLayers() {
 // ════════════════════════════════════════════════════════════════
 function exportCSV() {
   const flagged=auditedRules.filter(r=>r.flags.length);
-  const cols=['severity','name','action','src','dst','service','hits','last_hit','comment','flags'];
+  const cols=['severity','rule_num','name','action','src','dst','service','hits','hit_level','first_hit','last_hit','comment','flags'];
   const rows=[cols.join(','),...flagged.map(r=>cols.map(c=>{
     let v=c==='flags'?r.flags.join(' | '):(r[c]??'');
     return `"${String(v).replace(/"/g,'""')}"`;
@@ -893,21 +902,21 @@ function exportCSV() {
 // ════════════════════════════════════════════════════════════════
 function loadSample() {
   const raw=[
-    {name:'ALLOW_ALL_INTERNAL',enabled:'Yes',action:'Allow',src_zone:'Trust',src:'Any',dst_zone:'Untrust',dst:'Any',service:'Any',hits:'15234',last_hit:'2024-03-10',comment:'Legacy catch-all rule'},
-    {name:'BLOCK_KNOWN_BAD',   enabled:'Yes',action:'Deny', src_zone:'Any',  src:'192.168.100.5',dst_zone:'Any',dst:'Any',service:'Any',hits:'0',last_hit:'',comment:'Blocking bad host'},
-    {name:'PERMIT_WEB_DMZ',    enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.0.0.0/8',dst_zone:'DMZ',dst:'172.16.0.0/12',service:'TCP/80 TCP/443',hits:'8821',last_hit:'2024-03-12',comment:'Web traffic to DMZ'},
-    {name:'PERMIT_SSH_ANY_SRC',enabled:'Yes',action:'Allow',src_zone:'Any',  src:'Any',dst_zone:'Trust',dst:'10.10.10.0/24',service:'TCP/22',hits:'42',last_hit:'2024-01-05',comment:''},
-    {name:'ALLOW_DNS_OUT',     enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.0.0.0/8',dst_zone:'Untrust',dst:'Any',service:'UDP/53',hits:'2201',last_hit:'2024-03-12',comment:'DNS outbound'},
-    {name:'',                  enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.5.0.0/16',dst_zone:'DMZ',dst:'192.168.10.0/24',service:'TCP/8080',hits:'3',last_hit:'2023-08-01',comment:''},
-    {name:'DISABLED_OLD',      enabled:'No', action:'Allow',src_zone:'Trust',src:'Any',dst_zone:'Untrust',dst:'192.168.1.0/24',service:'Any',hits:'0',last_hit:'',comment:'Old migration rule'},
-    {name:'DENY_RFC1918',      enabled:'Yes',action:'Deny', src_zone:'Untrust',src:'10.0.0.0/8',dst_zone:'Any',dst:'Any',service:'Any',hits:'330',last_hit:'2024-03-11',comment:'Block spoofed RFC1918'},
-    {name:'UNUSED_PERMIT',     enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.20.0.0/16',dst_zone:'DMZ',dst:'192.168.5.0/24',service:'Any',hits:'0',last_hit:'',comment:'Project X - expired'},
-    {name:'MGMT_ACCESS',       enabled:'Yes',action:'Allow',src_zone:'Any',  src:'Any',dst_zone:'Mgmt',dst:'10.99.0.0/24',service:'Any',hits:'88',last_hit:'2024-03-08',comment:'Management access - review!'},
-    {name:'CLEANUP_DENY',      enabled:'Yes',action:'Deny', src_zone:'Any',  src:'Any',dst_zone:'Any',dst:'Any',service:'Any',hits:'12003',last_hit:'2024-03-12',comment:'Default deny all'},
-    {name:'SUPER_OPEN',        enabled:'Yes',action:'Allow',src_zone:'Any',  src:'Any',dst_zone:'Any',dst:'Any',service:'Any',hits:'1',last_hit:'2024-01-01',comment:'TEST RULE DO NOT USE'},
-    {name:'ALLOW_NTP',         enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.0.0.0/8',dst_zone:'Untrust',dst:'pool.ntp.org',service:'UDP/123',hits:'4500',last_hit:'2024-03-12',comment:'NTP sync'},
-    {name:'FTP_BROAD_SRC',     enabled:'Yes',action:'Allow',src_zone:'Trust',src:'1.0.0.0/8',dst_zone:'DMZ',dst:'172.16.50.0/24',service:'TCP/21',hits:'5',last_hit:'2023-11-20',comment:'FTP to file server'},
-    {name:'ALLOW_SMTP',        enabled:'Yes',action:'Allow',src_zone:'Trust',src:'10.0.0.0/8',dst_zone:'Untrust',dst:'Any',service:'TCP/25',hits:'1203',last_hit:'2024-03-12',comment:'SMTP outbound'},
+    {rule_num:1, name:'ALLOW_ALL_INTERNAL',enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'Any',          dst_zone:'Untrust',dst:'Any',           service:'Any',          hits:'15234',hit_level:'very-high',first_hit:'2019-01-15',last_hit:'2024-03-10',comment:'Legacy catch-all rule'},
+    {rule_num:2, name:'BLOCK_KNOWN_BAD',   enabled:'Yes',action:'Deny', src_zone:'Any',    src:'192.168.100.5',dst_zone:'Any',    dst:'Any',           service:'Any',          hits:'0',    hit_level:'none',     first_hit:'',           last_hit:'',          comment:'Blocking bad host'},
+    {rule_num:3, name:'PERMIT_WEB_DMZ',    enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.0.0.0/8',  dst_zone:'DMZ',    dst:'172.16.0.0/12', service:'TCP/80 TCP/443',hits:'8821', hit_level:'high',     first_hit:'2020-06-01',last_hit:'2024-03-12',comment:'Web traffic to DMZ'},
+    {rule_num:4, name:'PERMIT_SSH_ANY_SRC',enabled:'Yes',action:'Allow',src_zone:'Any',    src:'Any',          dst_zone:'Trust',  dst:'10.10.10.0/24', service:'TCP/22',        hits:'42',   hit_level:'low',      first_hit:'2023-11-01',last_hit:'2024-01-05',comment:''},
+    {rule_num:5, name:'ALLOW_DNS_OUT',     enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.0.0.0/8',  dst_zone:'Untrust',dst:'Any',           service:'UDP/53',        hits:'2201', hit_level:'medium',   first_hit:'2021-03-10',last_hit:'2024-03-12',comment:'DNS outbound'},
+    {rule_num:6, name:'',                  enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.5.0.0/16', dst_zone:'DMZ',    dst:'192.168.10.0/24',service:'TCP/8080',      hits:'3',    hit_level:'none',     first_hit:'2023-07-01',last_hit:'2023-08-01',comment:''},
+    {rule_num:7, name:'DISABLED_OLD',      enabled:'No', action:'Allow',src_zone:'Trust',  src:'Any',          dst_zone:'Untrust',dst:'192.168.1.0/24',service:'Any',          hits:'0',    hit_level:'none',     first_hit:'',           last_hit:'',          comment:'Old migration rule'},
+    {rule_num:8, name:'DENY_RFC1918',      enabled:'Yes',action:'Deny', src_zone:'Untrust',src:'10.0.0.0/8',  dst_zone:'Any',    dst:'Any',           service:'Any',          hits:'330',  hit_level:'low',      first_hit:'2021-01-05',last_hit:'2024-03-11',comment:'Block spoofed RFC1918'},
+    {rule_num:9, name:'UNUSED_PERMIT',     enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.20.0.0/16',dst_zone:'DMZ',    dst:'192.168.5.0/24',service:'Any',          hits:'0',    hit_level:'none',     first_hit:'',           last_hit:'',          comment:'Project X - expired'},
+    {rule_num:10,name:'MGMT_ACCESS',       enabled:'Yes',action:'Allow',src_zone:'Any',    src:'Any',          dst_zone:'Mgmt',   dst:'10.99.0.0/24',  service:'Any',          hits:'88',   hit_level:'low',      first_hit:'2022-09-01',last_hit:'2024-03-08',comment:'Management access - review!'},
+    {rule_num:11,name:'CLEANUP_DENY',      enabled:'Yes',action:'Deny', src_zone:'Any',    src:'Any',          dst_zone:'Any',    dst:'Any',           service:'Any',          hits:'12003',hit_level:'very-high',first_hit:'2019-01-15',last_hit:'2024-03-12',comment:'Default deny all'},
+    {rule_num:12,name:'SUPER_OPEN',        enabled:'Yes',action:'Allow',src_zone:'Any',    src:'Any',          dst_zone:'Any',    dst:'Any',           service:'Any',          hits:'1',    hit_level:'none',     first_hit:'2024-01-01',last_hit:'2024-01-01',comment:'TEST RULE DO NOT USE'},
+    {rule_num:13,name:'ALLOW_NTP',         enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.0.0.0/8',  dst_zone:'Untrust',dst:'pool.ntp.org',  service:'UDP/123',       hits:'4500', hit_level:'medium',   first_hit:'2020-11-20',last_hit:'2024-03-12',comment:'NTP sync'},
+    {rule_num:14,name:'FTP_BROAD_SRC',     enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'1.0.0.0/8',   dst_zone:'DMZ',    dst:'172.16.50.0/24',service:'TCP/21',        hits:'5',    hit_level:'none',     first_hit:'2023-10-01',last_hit:'2023-11-20',comment:'FTP to file server'},
+    {rule_num:15,name:'ALLOW_SMTP',        enabled:'Yes',action:'Allow',src_zone:'Trust',  src:'10.0.0.0/8',  dst_zone:'Untrust',dst:'Any',           service:'TCP/25',        hits:'1203', hit_level:'medium',   first_hit:'2021-05-01',last_hit:'2024-03-12',comment:'SMTP outbound'},
   ];
   auditedRules = raw.map(r=>auditRule({...r}));
   session.server='sample-data';
