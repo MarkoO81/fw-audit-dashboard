@@ -712,7 +712,7 @@
           <span><i style="background:rgba(255,77,77,.5);border:1px solid #ff4d4d"></i>Drop / Reject</span>
           <span><i style="background:rgba(77,166,255,.5);border:1px solid #4da6ff"></i>Internal IP</span>
           <span><i style="background:rgba(245,200,66,.5);border:1px solid #f5c842"></i>External IP</span>
-          <span style="color:var(--text-dim);font-size:11px">Node size = activity level · Line thickness = connection count</span>
+          <span style="color:var(--text-dim);font-size:11px">Node size = activity level · Line thickness = connection count · Drag node to pin · Double-click to unpin</span>
         </div>
 
         <!-- Tooltip -->
@@ -1601,6 +1601,7 @@ function ltApplySnapshot(snap) {
       y: existing?.y ?? (H/2 + (Math.random()-0.5)*200),
       vx: existing?.vx ?? 0,
       vy: existing?.vy ?? 0,
+      pinned: existing?.pinned ?? false,
     };
   }
   LT.nodes = newNodes;
@@ -1762,9 +1763,9 @@ function ltForceTick(nodes, edges) {
     b.vx -= dx*ATTRACT; b.vy -= dy*ATTRACT;
   }
 
-  // Integrate + damp
+  // Integrate + damp (skip actively dragged and pinned nodes)
   for (const n of nodes) {
-    if (n === LT.dragNode) continue;
+    if (n === LT.dragNode || n.pinned) continue;
     n.vx *= DAMP; n.vy *= DAMP;
     n.x += n.vx; n.y += n.vy;
     n.x = Math.max(30, Math.min(W-30, n.x));
@@ -1887,6 +1888,12 @@ function ltDraw() {
     ctx.font = `${Math.min(9, Math.max(7, r*0.22))}px sans-serif`;
     ctx.fillStyle = '#7a7f9a';
     ctx.fillText(`${n.allow||0}↑ ${n.drop||0}✗`, n.x, n.y + 9);
+
+    // Pinned indicator: small filled dot top-right of circle
+    if (n.pinned) {
+      ctx.beginPath(); ctx.arc(n.x+r*0.7, n.y-r*0.7, 4, 0, Math.PI*2);
+      ctx.fillStyle = '#f5c842'; ctx.fill();
+    }
   }
 
   ctx.restore();
@@ -1926,8 +1933,16 @@ function ltInitEvents() {
     LT.hovNode=ltHitNode(x,y);
     if (LT.hovNode!==prev) ltShowTooltip(e,LT.hovNode);
   });
-  c.addEventListener('mouseup', ()=>{ LT.drag=false; LT.dragNode=null; });
+  c.addEventListener('mouseup', ()=>{
+    if (LT.dragNode) LT.dragNode.pinned = true;   // pin on drop
+    LT.drag=false; LT.dragNode=null;
+  });
   c.addEventListener('mouseleave', ()=>{ LT.drag=false; LT.dragNode=null; LT.hovNode=null; ltHideTooltip(); });
+  c.addEventListener('dblclick', e => {             // double-click → unpin / re-simulate
+    const {x,y}=ltMousePos(e);
+    const n=ltHitNode(x,y);
+    if (n) { n.pinned=false; n.vx=0; n.vy=0; }
+  });
 }
 
 function ltMousePos(e) {
