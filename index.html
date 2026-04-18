@@ -844,6 +844,9 @@
             <option value="0">All</option>
           </select>
           <button class="sec" style="padding:4px 12px;font-size:12px" onclick="ltFitView()">⊡ Fit</button>
+          <button class="lt-layout-btn" id="lt-btn-ai" onclick="ltToggleAiFilter()" style="background:rgba(201,100,66,.1);border-color:rgba(201,100,66,.3);color:#c96442">
+            🤖 AI Traffic
+          </button>
           <button class="sec" style="padding:4px 12px;font-size:12px" onclick="ltClear()">Clear</button>
           <button class="sec" onclick="ltExportCSV()" id="btn-lt-export" disabled style="padding:4px 12px;font-size:12px">Export CSV</button>
         </div>
@@ -872,6 +875,11 @@
 
           <!-- Side panel -->
           <div class="lt-side-panel">
+            <div class="lt-talkers" id="lt-ai-panel">
+              <h4 style="display:flex;align-items:center;gap:6px">🤖 AI Providers <span id="lt-ai-count" style="font-size:10px;color:var(--text-dim);font-weight:400"></span></h4>
+              <div id="lt-ai-list"><span style="color:var(--text-dim);font-size:11px">No AI traffic detected…</span></div>
+              <div style="margin-top:8px;font-size:10px;color:var(--text-dim);line-height:1.4">IP-prefix based · domain matching with HTTPS inspection</div>
+            </div>
             <div class="lt-talkers" id="lt-talkers">
               <h4>Top Talkers</h4>
               <div id="lt-talkers-list"><span style="color:var(--text-dim);font-size:11px">No data yet…</span></div>
@@ -2089,6 +2097,8 @@ const LT = {
   layoutMode: 'force', // 'force' | 'bipartite'
   searchQuery: '',
   totalBytes: 0,
+  aiFilter: false,     // show only AI-related traffic
+  aiFilterId: null,    // null = all AI providers, or specific provider id
 };
 
 const RFC1918 = [
@@ -2097,6 +2107,104 @@ const RFC1918 = [
   /^192\.168\./,
   /^127\./,
 ];
+
+// ════════════════════════════════════════════════════════════════
+// AI PROVIDER DEFINITIONS
+// IP prefixes: best-effort — AI providers use shared cloud/CDN infrastructure.
+// Domain patterns: accurate when the firewall logs FQDNs (e.g. CP HTTPS inspection).
+// ════════════════════════════════════════════════════════════════
+const AI_PROVIDERS = [
+  {
+    id: 'anthropic', name: 'Anthropic / Claude', color: '#c96442',
+    icon: '◈',
+    // CloudFront distributions used by claude.ai + api.anthropic.com
+    prefixes: ['13.32.','13.35.','52.84.','52.85.','54.182.','54.230.',
+               '13.249.','99.84.','18.244.','18.160.','13.226.','143.204.'],
+    domains: ['anthropic.com','claude.ai','api.anthropic.com'],
+  },
+  {
+    id: 'openai', name: 'OpenAI / ChatGPT', color: '#10a37f',
+    icon: '◎',
+    // Cloudflare ranges used by api.openai.com + chat.openai.com
+    prefixes: ['104.18.','104.19.','172.64.','172.65.','162.159.'],
+    domains: ['openai.com','api.openai.com','oaiusercontent.com','chatgpt.com'],
+  },
+  {
+    id: 'azure', name: 'Azure OpenAI', color: '#0078d4',
+    icon: '▲',
+    // Azure public IP space (subset most likely to be Azure AI / Cognitive Services)
+    prefixes: ['20.33.','20.34.','20.35.','20.36.','20.37.','20.38.',
+               '40.74.','40.75.','40.76.','40.77.','13.107.','52.239.'],
+    domains: ['openai.azure.com','cognitiveservices.azure.com','azure.com'],
+  },
+  {
+    id: 'google', name: 'Google AI / Gemini', color: '#4285f4',
+    icon: '◆',
+    // Google Cloud + Google anycast
+    prefixes: ['34.','35.','142.250.','172.217.','74.125.','209.85.','216.58.'],
+    domains: ['googleapis.com','generativelanguage.googleapis.com',
+              'gemini.google.com','bard.google.com','ai.google.com'],
+  },
+  {
+    id: 'meta', name: 'Meta AI / Llama', color: '#0866ff',
+    icon: '◉',
+    prefixes: ['31.13.','157.240.','179.60.','185.89.','129.134.'],
+    domains: ['meta.ai','llama.meta.com','ai.meta.com'],
+  },
+  {
+    id: 'mistral', name: 'Mistral AI', color: '#f55036',
+    icon: '◍',
+    prefixes: [],
+    domains: ['mistral.ai','api.mistral.ai','console.mistral.ai'],
+  },
+  {
+    id: 'huggingface', name: 'Hugging Face', color: '#ff9d00',
+    icon: '◑',
+    // HF uses Cloudflare
+    prefixes: [],
+    domains: ['huggingface.co','huggingface.com'],
+  },
+  {
+    id: 'cohere', name: 'Cohere', color: '#39b5e0',
+    icon: '◌',
+    prefixes: [],
+    domains: ['cohere.com','cohere.ai','api.cohere.ai'],
+  },
+  {
+    id: 'perplexity', name: 'Perplexity AI', color: '#7c6af7',
+    icon: '⊕',
+    prefixes: [],
+    domains: ['perplexity.ai'],
+  },
+  {
+    id: 'xai', name: 'xAI / Grok', color: '#cccccc',
+    icon: '✕',
+    prefixes: [],
+    domains: ['x.ai','grok.x.ai','grok.com'],
+  },
+  {
+    id: 'stability', name: 'Stability AI', color: '#a855f7',
+    icon: '◐',
+    prefixes: [],
+    domains: ['stability.ai','api.stability.ai','dreamstudio.ai'],
+  },
+];
+
+/** Return the AI provider that matches this IP or FQDN, or null. */
+function getAiProvider(ip, fqdn) {
+  const f = (fqdn||'').toLowerCase();
+  const i = (ip||'');
+  for (const p of AI_PROVIDERS) {
+    if (f && p.domains.some(d => f === d || f.endsWith('.'+d))) return p;
+    if (i && p.prefixes.some(pfx => i.startsWith(pfx))) return p;
+  }
+  return null;
+}
+
+/** Return the AI provider for a node (checks ip + fqdn field). */
+function nodeAiProvider(n) {
+  return getAiProvider(n.ip, n.fqdn);
+}
 function isInternal(ip) { return RFC1918.some(r=>r.test(ip)); }
 
 function ltToggleListen() {
@@ -2185,6 +2293,7 @@ function ltApplySnapshot(snap) {
   ltUpdateStats();
   ltUpdateEventLog();
   ltUpdateTopTalkers();
+  ltUpdateAiPanel();
   if (Object.keys(LT.nodes).length) {
     document.getElementById('lt-overlay')?.classList.add('hidden');
     document.getElementById('btn-lt-export').disabled = false;
@@ -2225,6 +2334,7 @@ function ltClear() {
   ltUpdateStats();
   ltUpdateEventLog();
   ltUpdateTopTalkers();
+  ltUpdateAiPanel();
   document.getElementById('lt-overlay')?.classList.remove('hidden');
   document.getElementById('btn-lt-export').disabled = true;
 }
@@ -2319,6 +2429,88 @@ function ltVisibleEdges() {
     if (!showDrop && e.allow === 0) return false;
     return true;
   });
+}
+
+// ── AI Filter ─────────────────────────────────────────────────
+function ltToggleAiFilter(providerId) {
+  if (providerId !== undefined) {
+    // clicking a specific provider: if already selected → deselect, else select
+    if (LT.aiFilter && LT.aiFilterId === providerId) {
+      LT.aiFilter = false; LT.aiFilterId = null;
+    } else {
+      LT.aiFilter = true; LT.aiFilterId = providerId;
+    }
+  } else {
+    // toolbar button: toggle all AI
+    LT.aiFilter = !LT.aiFilter;
+    if (!LT.aiFilter) LT.aiFilterId = null;
+  }
+  const btn = document.getElementById('lt-btn-ai');
+  if (btn) {
+    btn.style.background = LT.aiFilter ? 'rgba(201,100,66,.25)' : 'rgba(201,100,66,.1)';
+    btn.style.borderColor = LT.aiFilter ? '#c96442' : 'rgba(201,100,66,.3)';
+    btn.style.fontWeight  = LT.aiFilter ? '700' : '';
+  }
+  ltUpdateAiPanel();
+}
+
+/** Check if a node is "AI-related" given the current filter state. */
+function nodeIsAi(n) {
+  const p = nodeAiProvider(n);
+  if (!p) return false;
+  if (LT.aiFilterId) return p.id === LT.aiFilterId;
+  return true;
+}
+
+/** Whether an edge involves at least one AI node. */
+function edgeIsAi(e, nodeMap) {
+  const a = nodeMap[e.src], b = nodeMap[e.dst];
+  return (a && nodeAiProvider(a)) || (b && nodeAiProvider(b));
+}
+
+function ltUpdateAiPanel() {
+  const el = document.getElementById('lt-ai-list');
+  const countEl = document.getElementById('lt-ai-count');
+  if (!el) return;
+
+  const nodes = Object.values(LT.nodes);
+  // Aggregate by provider
+  const seen = {};
+  for (const n of nodes) {
+    const p = nodeAiProvider(n);
+    if (!p) continue;
+    if (!seen[p.id]) seen[p.id] = { p, ips:[], allow:0, drop:0, bytes:0 };
+    seen[p.id].ips.push(n.ip);
+    seen[p.id].allow += n.allow||0;
+    seen[p.id].drop  += n.drop||0;
+    seen[p.id].bytes += n.bytes||0;
+  }
+
+  const entries = Object.values(seen);
+  if (countEl) countEl.textContent = entries.length ? `(${entries.length} detected)` : '';
+
+  if (!entries.length) {
+    el.innerHTML = '<span style="color:var(--text-dim);font-size:11px">No AI traffic detected</span>';
+    return;
+  }
+
+  const selected = LT.aiFilterId;
+  el.innerHTML = entries.map(({p,ips,allow,drop,bytes}) => {
+    const total = allow+drop;
+    const active = selected === p.id;
+    return `<div onclick="ltToggleAiFilter('${p.id}')" style="
+        display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;cursor:pointer;
+        margin-bottom:4px;transition:background .15s;
+        background:${active?p.color+'22':'transparent'};
+        border:1px solid ${active?p.color+'66':'transparent'}">
+      <span style="color:${p.color};font-size:13px;flex-shrink:0">${p.icon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:11px;font-weight:600;color:${p.color};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.name)}</div>
+        <div style="font-size:10px;color:var(--text-dim)">${ips.length} IP${ips.length!==1?'s':''} · ↑${allow} ✗${drop}${bytes?` · ${ltFmtBytes(bytes)}`:''}</div>
+      </div>
+      <div style="width:5px;height:5px;border-radius:50%;background:${total>0?p.color:'var(--border)'};flex-shrink:0"></div>
+    </div>`;
+  }).join('');
 }
 
 // ── Layout ────────────────────────────────────────────────────
@@ -2479,6 +2671,10 @@ function ltDraw() {
   }
   const dimming = LT.hovNode != null;
 
+  // AI filter sets
+  const aiMode = LT.aiFilter;
+  const aiNodeSet = aiMode ? new Set(nodes.filter(n=>nodeIsAi(n)).map(n=>n.ip)) : null;
+
   ctx.save();
   ctx.translate(LT.camX, LT.camY);
   ctx.scale(LT.camScale, LT.camScale);
@@ -2497,11 +2693,14 @@ function ltDraw() {
     const hasAllow=e.allow>0, hasDrop=e.drop>0;
     const col=hasDrop&&!hasAllow?'#ff4d4d':hasAllow&&hasDrop?'#f5c842':'#4dff91';
 
-    // Freshness alpha (1.0 = just seen, 0.15 = about to expire)
+    // Freshness alpha
     const age = now - (e.lastSeen||0);
     const freshness = Math.max(0.15, 1 - age/fadeWindow);
     const isHovEdge = hovEdgeKeys.has(e.src+'→'+e.dst);
-    const dimAlpha = dimming ? (isHovEdge ? 1.0 : 0.1) : freshness*0.65;
+    const isAiEdge = aiMode ? (aiNodeSet.has(e.src)||aiNodeSet.has(e.dst)) : true;
+    const dimAlpha = dimming ? (isHovEdge ? 1.0 : 0.1)
+                   : aiMode  ? (isAiEdge  ? freshness*0.85 : 0.06)
+                   :           freshness*0.65;
 
     const thick=Math.min(1.2+Math.log10((e.allow||0)+(e.drop||0)+1)*1.8, 5.5);
 
@@ -2557,7 +2756,9 @@ function ltDraw() {
     const isNeighbour=!dimming||hovNeighbours.has(n.ip);
     const age=now-(n.lastSeen||0);
     const freshness=Math.max(0.2,1-age/fadeWindow);
-    const nodeAlpha=dimming?(isNeighbour?1.0:0.12):freshness;
+    const isAiNode = !aiMode || aiNodeSet.has(n.ip);
+    const nodeAlpha=dimming?(isNeighbour?1.0:0.12):aiMode?(isAiNode?1.0:0.07):freshness;
+    const aiProv = nodeAiProvider(n);
 
     const base=dropRatio>0.6?'#ff4d4d':dropRatio>0.25?'#f5c842':n.internal?'#4da6ff':'#4dff91';
 
@@ -2610,6 +2811,25 @@ function ltDraw() {
     if (n.pinned) {
       ctx.beginPath(); ctx.arc(n.x+r*0.68,n.y-r*0.68,3.5,0,Math.PI*2);
       ctx.fillStyle='#f5c842'; ctx.fill();
+    }
+
+    // AI provider badge (shown always when provider detected, prominent when aiMode on)
+    if (aiProv) {
+      const badgeR = aiMode ? 10 : 7;
+      const bx = n.x - r*0.65, by = n.y - r*0.65;
+      ctx.beginPath(); ctx.arc(bx,by,badgeR,0,Math.PI*2);
+      ctx.fillStyle = aiProv.color+'dd'; ctx.fill();
+      ctx.strokeStyle = '#0f1117'; ctx.lineWidth = 1.2; ctx.stroke();
+      ctx.font = `bold ${aiMode?9:6}px sans-serif`;
+      ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(aiProv.icon, bx, by);
+      // Provider name label below node when in AI mode
+      if (aiMode && LT.camScale > 0.5) {
+        ctx.font = `bold 9px sans-serif`;
+        ctx.fillStyle = aiProv.color;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(aiProv.name, n.x, n.y + r + 4);
+      }
     }
 
     ctx.globalAlpha=1;
