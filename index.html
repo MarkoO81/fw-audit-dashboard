@@ -446,8 +446,8 @@
     transition:border-color .2s;}
   .integ-card.active{border-color:rgba(108,123,255,.35);}
   .integ-card-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
-  .integ-logo{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;
-    flex-shrink:0;font-size:20px;}
+  .integ-logo{width:52px;height:52px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-size:20px;overflow:hidden;}
   .integ-info{flex:1;min-width:0;}
   .integ-name{font-size:14px;font-weight:700;}
   .integ-type{font-size:11px;color:var(--text-dim);margin-top:2px;}
@@ -938,11 +938,15 @@
           <!-- ── Check Point ── -->
           <div class="integ-card active" id="integ-card-checkpoint">
             <div class="integ-card-head">
-              <div class="integ-logo" style="background:rgba(255,77,77,.1)">
-                <!-- CP logo -->
-                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
-                  <circle cx="20" cy="20" r="18" fill="#cc0000" opacity=".9"/>
-                  <path d="M14 20h12M20 14v12" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+              <div class="integ-logo" style="background:#cc0000">
+                <!-- Check Point shield logo -->
+                <svg viewBox="0 0 52 52" width="52" height="52" fill="none">
+                  <!-- Shield body -->
+                  <path d="M26 4 L44 11 L44 27 C44 37 36 44 26 48 C16 44 8 37 8 27 L8 11 Z" fill="white"/>
+                  <!-- Inner shield / checkmark area -->
+                  <path d="M26 10 L39 15.5 L39 27 C39 34.5 33 40 26 43 C19 40 13 34.5 13 27 L13 15.5 Z" fill="#cc0000"/>
+                  <!-- White checkmark -->
+                  <path d="M18 27 L23.5 33 L34 20" stroke="white" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
               </div>
               <div class="integ-info">
@@ -986,10 +990,15 @@
           <!-- ── Fortinet ── -->
           <div class="integ-card" id="integ-card-fortinet">
             <div class="integ-card-head">
-              <div class="integ-logo" style="background:rgba(255,140,66,.1)">
-                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
-                  <rect x="4" y="10" width="32" height="20" rx="4" fill="#ee3124" opacity=".9"/>
-                  <path d="M13 20h6v-5l8 5-8 5v-5h-6z" fill="white"/>
+              <div class="integ-logo" style="background:#ee3124">
+                <!-- Fortinet logo — geometric stacked-block F -->
+                <svg viewBox="0 0 52 52" width="52" height="52" fill="none">
+                  <!-- Top bar (full width) -->
+                  <rect x="10" y="10" width="32" height="8" rx="2" fill="white"/>
+                  <!-- Middle bar (partial) -->
+                  <rect x="10" y="22" width="22" height="8" rx="2" fill="white"/>
+                  <!-- Vertical stem -->
+                  <rect x="10" y="10" width="8" height="32" rx="2" fill="white"/>
                 </svg>
               </div>
               <div class="integ-info">
@@ -1005,10 +1014,18 @@
           <!-- ── Palo Alto ── -->
           <div class="integ-card" id="integ-card-paloalto">
             <div class="integ-card-head">
-              <div class="integ-logo" style="background:rgba(77,166,255,.1)">
-                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
-                  <circle cx="20" cy="20" r="16" fill="none" stroke="#00c0e8" stroke-width="2.5"/>
-                  <path d="M12 20h4l3-6 4 12 3-6h4" stroke="#00c0e8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <div class="integ-logo" style="background:#0d1117">
+                <!-- Palo Alto Networks — radial sun / overlapping ovals -->
+                <svg viewBox="0 0 52 52" width="52" height="52" fill="none">
+                  <g opacity="0.95">
+                    <!-- 6 elongated ovals at 30° increments, intersecting at center -->
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" transform="rotate(0 26 26)"/>
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" opacity=".85" transform="rotate(30 26 26)"/>
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" opacity=".85" transform="rotate(60 26 26)"/>
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" opacity=".85" transform="rotate(90 26 26)"/>
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" opacity=".85" transform="rotate(120 26 26)"/>
+                    <ellipse cx="26" cy="26" rx="20" ry="5" fill="#00c0e8" opacity=".85" transform="rotate(150 26 26)"/>
+                  </g>
                 </svg>
               </div>
               <div class="integ-info">
@@ -1024,14 +1041,22 @@
           <!-- ── Cisco ── -->
           <div class="integ-card" id="integ-card-cisco">
             <div class="integ-card-head">
-              <div class="integ-logo" style="background:rgba(77,255,145,.08)">
-                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+              <div class="integ-logo" style="background:#ffffff">
+                <!-- Cisco — iconic 6-bar bridge / electromagnetic wave logo -->
+                <svg viewBox="0 0 52 52" width="52" height="52" fill="none">
                   <g fill="#049fd9">
-                    <rect x="7"  y="16" width="4" height="9" rx="1"/>
-                    <rect x="13" y="12" width="4" height="13" rx="1"/>
-                    <rect x="19" y="9"  width="4" height="16" rx="1"/>
-                    <rect x="25" y="12" width="4" height="13" rx="1"/>
-                    <rect x="31" y="16" width="4" height="9" rx="1" opacity=".7"/>
+                    <!-- bars: outer short → inner tall, symmetric -->
+                    <rect x="4"  y="30" width="6" height="10" rx="2"/>
+                    <rect x="12" y="24" width="6" height="16" rx="2"/>
+                    <rect x="20" y="18" width="6" height="22" rx="2"/>
+                    <rect x="28" y="24" width="6" height="16" rx="2"/>
+                    <rect x="36" y="30" width="6" height="10" rx="2"/>
+                    <!-- dot row above bars -->
+                    <circle cx="7"  cy="27" r="2.5"/>
+                    <circle cx="15" cy="21" r="2.5"/>
+                    <circle cx="23" cy="15" r="2.5"/>
+                    <circle cx="31" cy="21" r="2.5"/>
+                    <circle cx="39" cy="27" r="2.5"/>
                   </g>
                 </svg>
               </div>
