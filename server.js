@@ -568,6 +568,10 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 `);
 
+// Migrate existing DBs that pre-date the app column (idempotent — errors ignored)
+try { db.exec(`ALTER TABLE events ADD COLUMN app TEXT DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE edges  ADD COLUMN app TEXT DEFAULT ''`); } catch {}
+
 // Prepared statements for hot path (UDP handler)
 const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,app,bytes,allowed) VALUES(?,?,?,?,?,?,?,?)`);
 const stmtUpsertNode   = db.prepare(`
@@ -656,10 +660,6 @@ function parseSyslogEvent(raw) {
     bytes:   parseInt(kv.bytes) || 0,
   };
 }
-
-// Add app column to existing DB if upgrading from older schema (idempotent)
-try { db.exec(`ALTER TABLE events ADD COLUMN app TEXT DEFAULT ''`); } catch {}
-try { db.exec(`ALTER TABLE edges  ADD COLUMN app TEXT DEFAULT ''`); } catch {}
 
 function buildSnapshot(windowSec = 3600) {
   const cutoff = windowSec ? Date.now() - windowSec * 1000 : 0;
