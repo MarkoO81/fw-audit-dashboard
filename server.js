@@ -535,15 +535,18 @@ db.exec(`
   PRAGMA journal_mode=WAL;
 
   CREATE TABLE IF NOT EXISTS events (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts       INTEGER NOT NULL,
-    src      TEXT NOT NULL,
-    dst      TEXT NOT NULL,
-    action   TEXT,
-    service  TEXT,
-    app      TEXT DEFAULT '',
-    bytes    INTEGER DEFAULT 0,
-    allowed  INTEGER DEFAULT 0
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts         INTEGER NOT NULL,
+    src        TEXT NOT NULL,
+    dst        TEXT NOT NULL,
+    action     TEXT,
+    service    TEXT,
+    app        TEXT DEFAULT '',
+    bytes      INTEGER DEFAULT 0,
+    bytes_out  INTEGER DEFAULT 0,
+    bytes_in   INTEGER DEFAULT 0,
+    src_user   TEXT DEFAULT '',
+    allowed    INTEGER DEFAULT 0
   );
 
   CREATE TABLE IF NOT EXISTS nodes (
@@ -555,25 +558,32 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS edges (
-    src      TEXT NOT NULL,
-    dst      TEXT NOT NULL,
-    allow_c  INTEGER DEFAULT 0,
-    drop_c   INTEGER DEFAULT 0,
-    service  TEXT DEFAULT '',
-    app      TEXT DEFAULT '',
-    last_ts  INTEGER DEFAULT 0,
+    src        TEXT NOT NULL,
+    dst        TEXT NOT NULL,
+    allow_c    INTEGER DEFAULT 0,
+    drop_c     INTEGER DEFAULT 0,
+    service    TEXT DEFAULT '',
+    app        TEXT DEFAULT '',
+    bytes_out  INTEGER DEFAULT 0,
+    bytes_in   INTEGER DEFAULT 0,
+    last_ts    INTEGER DEFAULT 0,
     PRIMARY KEY(src, dst)
   );
 
   CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
 `);
 
-// Migrate existing DBs that pre-date the app column (idempotent — errors ignored)
-try { db.exec(`ALTER TABLE events ADD COLUMN app TEXT DEFAULT ''`); } catch {}
-try { db.exec(`ALTER TABLE edges  ADD COLUMN app TEXT DEFAULT ''`); } catch {}
+// Migrate existing DBs (idempotent — errors ignored)
+try { db.exec(`ALTER TABLE events ADD COLUMN app       TEXT    DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN bytes_out INTEGER DEFAULT 0`);  } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN bytes_in  INTEGER DEFAULT 0`);  } catch {}
+try { db.exec(`ALTER TABLE events ADD COLUMN src_user  TEXT    DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE edges  ADD COLUMN app       TEXT    DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE edges  ADD COLUMN bytes_out INTEGER DEFAULT 0`);  } catch {}
+try { db.exec(`ALTER TABLE edges  ADD COLUMN bytes_in  INTEGER DEFAULT 0`);  } catch {}
 
 // Prepared statements for hot path (UDP handler)
-const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,app,bytes,allowed) VALUES(?,?,?,?,?,?,?,?)`);
+const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,app,bytes,bytes_out,bytes_in,src_user,allowed) VALUES(?,?,?,?,?,?,?,?,?,?,?)`);
 const stmtUpsertNode   = db.prepare(`
   INSERT INTO nodes(ip,allow_c,drop_c,bytes,last_ts) VALUES(?,?,?,?,?)
   ON CONFLICT(ip) DO UPDATE SET
@@ -583,22 +593,24 @@ const stmtUpsertNode   = db.prepare(`
     last_ts = MAX(last_ts, excluded.last_ts)
 `);
 const stmtUpsertEdge   = db.prepare(`
-  INSERT INTO edges(src,dst,allow_c,drop_c,service,app,last_ts) VALUES(?,?,?,?,?,?,?)
+  INSERT INTO edges(src,dst,allow_c,drop_c,service,app,bytes_out,bytes_in,last_ts) VALUES(?,?,?,?,?,?,?,?,?)
   ON CONFLICT(src,dst) DO UPDATE SET
-    allow_c = allow_c + excluded.allow_c,
-    drop_c  = drop_c  + excluded.drop_c,
-    service = COALESCE(NULLIF(excluded.service,''), edges.service),
-    app     = COALESCE(NULLIF(excluded.app,''), edges.app),
-    last_ts = MAX(last_ts, excluded.last_ts)
+    allow_c   = allow_c   + excluded.allow_c,
+    drop_c    = drop_c    + excluded.drop_c,
+    service   = COALESCE(NULLIF(excluded.service,''), edges.service),
+    app       = COALESCE(NULLIF(excluded.app,''), edges.app),
+    bytes_out = bytes_out + excluded.bytes_out,
+    bytes_in  = bytes_in  + excluded.bytes_in,
+    last_ts   = MAX(last_ts, excluded.last_ts)
 `);
 
 // Wrap the three writes in a single transaction for speed
 const insertTraffic = db.transaction((ev, allowed) => {
   const ts = ev.ts;
-  stmtInsertEvent.run(ts, ev.src, ev.dst, ev.action, ev.service||'', ev.app||'', ev.bytes||0, allowed?1:0);
+  stmtInsertEvent.run(ts, ev.src, ev.dst, ev.action, ev.service||'', ev.app||'', ev.bytes||0, ev.bytes_out||0, ev.bytes_in||0, ev.src_user||'', allowed?1:0);
   stmtUpsertNode.run(ev.src, allowed?1:0, allowed?0:1, ev.bytes||0, ts);
   stmtUpsertNode.run(ev.dst, 0, 0, 0, ts);
-  stmtUpsertEdge.run(ev.src, ev.dst, allowed?1:0, allowed?0:1, ev.service||'', ev.app||'', ts);
+  stmtUpsertEdge.run(ev.src, ev.dst, allowed?1:0, allowed?0:1, ev.service||'', ev.app||'', ev.bytes_out||0, ev.bytes_in||0, ts);
 });
 
 // ─── syslog receiver (live traffic) ──────────────────────────────────────────
@@ -648,16 +660,25 @@ function parseSyslogEvent(raw) {
 
   // app: APPI blade identification (rich name like "ChatGPT", "YouTube")
   // service: protocol/port-level name (https, dns, smtp)
-  const app     = kv.appi_name || kv.app_name || kv.application || kv.app || '';
-  const service = kv.service || kv.proto || '';
+  const app      = kv.appi_name || kv.app_name || kv.application || kv.app || '';
+  const service  = kv.service || kv.proto || '';
+
+  // Directional bytes: c2s = client→server (upload), s2c = server→client (download)
+  const bytes_out = parseInt(kv.c2s_bytes || kv.bytes_sent   || kv.orig_bytes  || 0) || 0;
+  const bytes_in  = parseInt(kv.s2c_bytes || kv.bytes_received || kv.reply_bytes || 0) || 0;
+  const bytes     = parseInt(kv.bytes) || (bytes_out + bytes_in) || 0;
+
+  // User identity from CP Identity Awareness blade
+  const src_user = kv.src_user_name || kv.src_user || kv.user_name || kv.user || '';
 
   return {
     ts:      Date.now(),
     src, dst,
     action:  kv.action || 'unknown',
-    service: service || app,  // fallback so service is never empty if we have app
+    service: service || app,
     app,
-    bytes:   parseInt(kv.bytes) || 0,
+    bytes, bytes_out, bytes_in,
+    src_user,
   };
 }
 
@@ -667,8 +688,8 @@ function buildSnapshot(windowSec = 3600) {
   const args   = cutoff ? [cutoff] : [];
 
   const nodes  = db.prepare(`SELECT ip, allow_c, drop_c, bytes, last_ts FROM nodes ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 500`).all(...args);
-  const edges  = db.prepare(`SELECT src, dst, allow_c, drop_c, service, app, last_ts FROM edges ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 2000`).all(...args);
-  const recent = db.prepare(`SELECT ts,src,dst,action,service,app,bytes FROM events ORDER BY ts DESC LIMIT 200`).all();
+  const edges  = db.prepare(`SELECT src, dst, allow_c, drop_c, service, app, bytes_out, bytes_in, last_ts FROM edges ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 2000`).all(...args);
+  const recent = db.prepare(`SELECT ts,src,dst,action,service,app,bytes,bytes_out,bytes_in,src_user FROM events ORDER BY ts DESC LIMIT 200`).all();
   const total  = db.prepare(`SELECT COUNT(*) as c FROM events`).get().c;
 
   // Top applications: aggregate by app (fall back to service), count events + bytes
@@ -690,7 +711,7 @@ function buildSnapshot(windowSec = 3600) {
     type: 'snapshot', ts: Date.now(),
     totalEvents: total,
     nodes:       nodes.map(n => ({ ip:n.ip, allow:n.allow_c, drop:n.drop_c, bytes:n.bytes, lastSeen:n.last_ts })),
-    edges:       edges.map(e => ({ src:e.src, dst:e.dst, allow:e.allow_c, drop:e.drop_c, service:e.service, app:e.app, lastSeen:e.last_ts })),
+    edges:       edges.map(e => ({ src:e.src, dst:e.dst, allow:e.allow_c, drop:e.drop_c, service:e.service, app:e.app, bytes_out:e.bytes_out, bytes_in:e.bytes_in, lastSeen:e.last_ts })),
     recentEvents: recent,
     topApps,
   };

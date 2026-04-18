@@ -463,6 +463,33 @@
 
   .settings-section{margin-bottom:32px;}
   .settings-section h2{margin-bottom:14px;}
+
+  /* ── AI Detection tab ── */
+  .ai-summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:24px;}
+  .ai-stat-card{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 18px;display:flex;flex-direction:column;gap:4px;}
+  .ai-stat-card .val{font-size:26px;font-weight:700;color:var(--text);}
+  .ai-stat-card .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.6px;}
+  .ai-stat-card.warn .val{color:var(--warn);}
+  .ai-stat-card.crit .val{color:var(--critical);}
+  .ai-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+  @media(max-width:900px){.ai-two-col{grid-template-columns:1fr;}}
+  .ai-section{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;}
+  .ai-section h3{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--text-dim);margin-bottom:14px;}
+  .ai-provider-card{display:flex;align-items:center;gap:12px;padding:10px;border-radius:8px;margin-bottom:8px;background:var(--surface);border:1px solid transparent;cursor:default;transition:border-color .15s;}
+  .ai-provider-card:hover{border-color:var(--border);}
+  .ai-provider-logo{width:36px;height:36px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;overflow:hidden;}
+  .ai-provider-meta{flex:1;min-width:0;}
+  .ai-provider-name{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .ai-provider-sub{font-size:10px;color:var(--text-dim);}
+  .ai-provider-stats{text-align:right;flex-shrink:0;}
+  .ai-device-row{display:grid;grid-template-columns:1fr auto auto auto;gap:8px;align-items:center;padding:7px 4px;border-bottom:1px solid var(--border);font-size:11px;}
+  .ai-device-row:last-child{border-bottom:none;}
+  .ai-device-row.header{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .upload-row{display:grid;grid-template-columns:auto 1fr auto auto auto;gap:10px;align-items:center;padding:8px 6px;border-bottom:1px solid var(--border);font-size:11px;}
+  .upload-row:last-child{border-bottom:none;}
+  .upload-row.header{font-size:10px;color:var(--text-dim);font-weight:600;text-transform:uppercase;letter-spacing:.5px;}
+  .upload-flag{background:#ff4d4d22;color:#ff4d4d;border:1px solid #ff4d4d44;border-radius:4px;padding:1px 6px;font-size:10px;font-weight:700;white-space:nowrap;}
+  .upload-flag.warn{background:#f5c84222;color:#f5c842;border-color:#f5c84244;}
 </style>
 </head>
 <body>
@@ -606,6 +633,9 @@
       </button>
       <button class="tab-btn" onclick="switchTab('livetraffic')" id="tbtn-livetraffic">
         ◎ Live Traffic <span class="tbadge" id="tb-livetraffic">●</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('aishadow')" id="tbtn-aishadow">
+        🤖 AI Detection <span class="tbadge" id="tb-aishadow" style="display:none">●</span>
       </button>
       <button class="tab-btn" onclick="switchTab('settings')" id="tbtn-settings" style="margin-left:auto">
         ⚙ Settings
@@ -930,6 +960,61 @@
           </div>
         </details>
       </section>
+    </div>
+
+    <!-- ══ AI DETECTION ══ -->
+    <div class="tab-pane" id="tab-aishadow">
+
+      <!-- Summary cards -->
+      <div class="ai-summary-grid">
+        <div class="ai-stat-card"><span class="val" id="ai-s-providers">0</span><span class="lbl">Providers Detected</span></div>
+        <div class="ai-stat-card"><span class="val" id="ai-s-devices">0</span><span class="lbl">AI Devices</span></div>
+        <div class="ai-stat-card"><span class="val" id="ai-s-events">0</span><span class="lbl">AI Events</span></div>
+        <div class="ai-stat-card"><span class="val" id="ai-s-bytes">—</span><span class="lbl">Total AI Bytes</span></div>
+        <div class="ai-stat-card warn"><span class="val" id="ai-s-uploads">0</span><span class="lbl">Upload Alerts</span></div>
+        <div class="ai-stat-card"><span class="val" id="ai-s-users">—</span><span class="lbl">Users Identified</span></div>
+      </div>
+
+      <div class="ai-two-col">
+        <!-- AI Providers -->
+        <div class="ai-section">
+          <h3>AI Providers Detected</h3>
+          <div id="ai-providers-list"><span style="color:var(--text-dim);font-size:12px">No AI traffic detected yet…</span></div>
+        </div>
+        <!-- Top AI Devices -->
+        <div class="ai-section">
+          <h3>Top AI Devices</h3>
+          <div class="ai-device-row header">
+            <span>Device</span><span>Providers</span><span>↑ Upload</span><span>Events</span>
+          </div>
+          <div id="ai-devices-list"><span style="color:var(--text-dim);font-size:12px">No data yet…</span></div>
+        </div>
+      </div>
+
+      <!-- Upload Anomalies -->
+      <div class="ai-section" style="margin-bottom:20px">
+        <h3 style="display:flex;align-items:center;gap:10px">
+          Upload Anomalies
+          <span style="font-size:11px;color:var(--text-dim);font-weight:400;text-transform:none;letter-spacing:0">
+            — sessions where outbound bytes to an AI provider exceed threshold
+          </span>
+          <span style="margin-left:auto;font-size:11px;color:var(--text-dim)">
+            Threshold: <input id="ai-upload-threshold" type="number" value="500" min="1" style="width:60px;padding:2px 5px;background:var(--surface);border:1px solid var(--border);border-radius:4px;color:var(--text)"> KB
+            <button onclick="renderAiTab()" style="margin-left:4px;padding:2px 8px;font-size:11px">Apply</button>
+          </span>
+        </h3>
+        <div class="upload-row header">
+          <span>Severity</span><span>Source → Provider</span><span>User</span><span>↑ Upload</span><span>↓ Download</span>
+        </div>
+        <div id="ai-uploads-list"><span style="color:var(--text-dim);font-size:12px;padding:8px 0;display:block">No upload anomalies detected…</span></div>
+      </div>
+
+      <!-- Recent AI Events -->
+      <div class="ai-section">
+        <h3>Recent AI Events</h3>
+        <div class="lt-event-log" id="ai-event-log" style="max-height:300px"><span style="color:var(--text-dim);font-size:12px">No events yet…</span></div>
+      </div>
+
     </div>
 
     <!-- ══ SETTINGS ══ -->
@@ -1549,6 +1634,7 @@ function switchTab(name) {
   document.getElementById('tbtn-'+name)?.classList.add('active');
   if (name==='findings') renderFindings();
   if (name==='livetraffic' && !LT.canvas) setTimeout(ltInitCanvas, 50);
+  if (name==='aishadow') renderAiTab();
   if (name==='settings') updateIntegDots();
 }
 
@@ -2438,6 +2524,7 @@ function ltApplySnapshot(snap) {
   ltUpdateTopApps();
   ltUpdateTopTalkers();
   ltUpdateAiPanel();
+  if (document.getElementById('tab-aishadow')?.classList.contains('active')) renderAiTab();
   if (Object.keys(LT.nodes).length) {
     document.getElementById('lt-overlay')?.classList.add('hidden');
     document.getElementById('btn-lt-export').disabled = false;
@@ -2701,6 +2788,156 @@ function ltUpdateAiPanel() {
       <div style="width:5px;height:5px;border-radius:50%;background:${total>0?p.color:'var(--border)'};flex-shrink:0"></div>
     </div>`;
   }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════
+// AI DETECTION TAB
+// ════════════════════════════════════════════════════════════════
+
+function computeAiTabStats() {
+  const edges = Object.values(LT.edges);
+  const UPLOAD_KB = parseInt(document.getElementById('ai-upload-threshold')?.value || 500);
+  const UPLOAD_THRESHOLD = UPLOAD_KB * 1024;
+
+  const provMap  = {}; // provider id → stats
+  const devMap   = {}; // src ip → stats
+  const uploads  = [];
+  const aiEvents = [];
+
+  for (const e of edges) {
+    const prov = getAiProvider(e.dst, '');
+    if (!prov) continue;
+
+    // Provider aggregation
+    if (!provMap[prov.id]) provMap[prov.id] = { prov, devices: new Set(), events:0, bytesOut:0, bytesIn:0 };
+    const ps = provMap[prov.id];
+    ps.devices.add(e.src);
+    ps.events   += (e.allow||0) + (e.drop||0);
+    ps.bytesOut += e.bytes_out || 0;
+    ps.bytesIn  += e.bytes_in  || 0;
+
+    // Device aggregation
+    if (!devMap[e.src]) devMap[e.src] = { ip: e.src, providers: new Set(), events:0, bytesOut:0, bytesIn:0 };
+    const ds = devMap[e.src];
+    ds.providers.add(prov.id);
+    ds.events   += (e.allow||0) + (e.drop||0);
+    ds.bytesOut += e.bytes_out || 0;
+    ds.bytesIn  += e.bytes_in  || 0;
+
+    // Upload anomaly
+    if ((e.bytes_out||0) >= UPLOAD_THRESHOLD) {
+      uploads.push({ src: e.src, dst: e.dst, prov, bytesOut: e.bytes_out||0, bytesIn: e.bytes_in||0, lastSeen: e.lastSeen });
+    }
+  }
+
+  // Recent AI events from event log
+  for (const ev of (LT.eventLog||[])) {
+    if (getAiProvider(ev.dst, '')) aiEvents.push(ev);
+  }
+
+  return {
+    providers: Object.values(provMap).sort((a,b)=>b.events-a.events),
+    devices:   Object.values(devMap).sort((a,b)=>b.bytesOut-a.bytesOut).slice(0,15),
+    uploads:   uploads.sort((a,b)=>b.bytesOut-a.bytesOut),
+    aiEvents:  aiEvents.slice(0,60),
+  };
+}
+
+function renderAiTab() {
+  const stats = computeAiTabStats();
+  const { providers, devices, uploads, aiEvents } = stats;
+
+  // Summary cards
+  const totalEvents = providers.reduce((s,p)=>s+p.events, 0);
+  const totalBytes  = providers.reduce((s,p)=>s+p.bytesOut+p.bytesIn, 0);
+  const totalDevices= new Set(devices.map(d=>d.ip)).size;
+
+  // Unique users from event log
+  const users = new Set(aiEvents.map(e=>e.src_user).filter(Boolean));
+
+  document.getElementById('ai-s-providers').textContent = providers.length;
+  document.getElementById('ai-s-devices').textContent   = totalDevices;
+  document.getElementById('ai-s-events').textContent    = totalEvents.toLocaleString();
+  document.getElementById('ai-s-bytes').textContent     = ltFmtBytes(totalBytes);
+  document.getElementById('ai-s-uploads').textContent   = uploads.length;
+  document.getElementById('ai-s-users').textContent     = users.size || '—';
+
+  // Upload alert badge on tab
+  const badge = document.getElementById('tb-aishadow');
+  if (badge) { badge.style.display = uploads.length ? '' : 'none'; badge.style.color='var(--critical)'; }
+
+  // Provider cards
+  const provEl = document.getElementById('ai-providers-list');
+  if (provEl) {
+    provEl.innerHTML = providers.length ? providers.map(({prov:p, devices:devs, events, bytesOut, bytesIn}) => `
+      <div class="ai-provider-card">
+        <div class="ai-provider-logo" style="background:${p.color}22">
+          <img src="${aiLogoUrl(p.id)}" width="28" height="28" style="border-radius:5px" onerror="this.style.display='none'">
+        </div>
+        <div class="ai-provider-meta">
+          <div class="ai-provider-name" style="color:${p.color}">${esc(p.name)}</div>
+          <div class="ai-provider-sub">${devs.size} device${devs.size!==1?'s':''} · ${events} events</div>
+        </div>
+        <div class="ai-provider-stats" style="font-size:10px;color:var(--text-dim)">
+          <div style="color:var(--warn)">↑ ${ltFmtBytes(bytesOut)}</div>
+          <div>↓ ${ltFmtBytes(bytesIn)}</div>
+        </div>
+      </div>`).join('') :
+      '<span style="color:var(--text-dim);font-size:12px">No AI traffic detected yet…</span>';
+  }
+
+  // Device rows
+  const devEl = document.getElementById('ai-devices-list');
+  if (devEl) {
+    devEl.innerHTML = devices.length ? devices.map(d => {
+      const provLogos = [...d.providers].map(id=>{
+        const p = AI_PROVIDERS.find(x=>x.id===id);
+        return p ? `<img src="${aiLogoUrl(id)}" width="16" height="16" title="${esc(p.name)}" style="border-radius:3px" onerror="this.style.display='none'">` : '';
+      }).join('');
+      return `<div class="ai-device-row">
+        <span style="font-family:monospace;color:${isInternal(d.ip)?'#4da6ff':'#4dff91'}">${esc(d.ip)}</span>
+        <span style="display:flex;gap:3px;align-items:center">${provLogos}</span>
+        <span style="color:var(--warn)">${ltFmtBytes(d.bytesOut)}</span>
+        <span style="color:var(--text-dim)">${d.events}</span>
+      </div>`;
+    }).join('') :
+    '<span style="color:var(--text-dim);font-size:12px">No data yet…</span>';
+  }
+
+  // Upload anomalies
+  const upEl = document.getElementById('ai-uploads-list');
+  if (upEl) {
+    if (!uploads.length) {
+      upEl.innerHTML = '<span style="color:var(--text-dim);font-size:12px;padding:8px 0;display:block">No upload anomalies detected…</span>';
+    } else {
+      upEl.innerHTML = uploads.map(u => {
+        const mb = u.bytesOut / (1024*1024);
+        const sevClass = mb >= 10 ? 'upload-flag' : 'upload-flag warn';
+        const sevLabel = mb >= 10 ? 'HIGH' : 'MEDIUM';
+        // Try to find user from recent events
+        const matchEv = (LT.eventLog||[]).find(e=>e.src===u.src && e.dst===u.dst && e.src_user);
+        const user = matchEv?.src_user || '—';
+        return `<div class="upload-row">
+          <span><span class="${sevClass}">${sevLabel}</span></span>
+          <span>
+            <span style="font-family:monospace;color:#4da6ff">${esc(u.src)}</span>
+            <span style="color:var(--text-dim)"> → </span>
+            <span style="color:${u.prov.color};font-weight:600">${esc(u.prov.name)}</span>
+          </span>
+          <span style="color:var(--text-dim)">${esc(user)}</span>
+          <span style="color:var(--critical);font-weight:600">↑ ${ltFmtBytes(u.bytesOut)}</span>
+          <span style="color:var(--text-dim)">↓ ${ltFmtBytes(u.bytesIn)}</span>
+        </div>`;
+      }).join('');
+    }
+  }
+
+  // Recent AI events
+  const logEl = document.getElementById('ai-event-log');
+  if (logEl) {
+    logEl.innerHTML = aiEvents.length ? ltRenderEventRows(aiEvents) :
+      '<span style="color:var(--text-dim);font-size:12px;padding:8px 12px;display:block">No AI events yet…</span>';
+  }
 }
 
 // ── Layout ────────────────────────────────────────────────────
