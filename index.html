@@ -346,16 +346,34 @@
   .lc-log .warn{color:var(--medium);}
 
   /* ── Live Traffic ── */
-  .lt-config-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px;padding:10px 14px;
+  .lt-config-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;padding:10px 14px;
     background:var(--surface);border:1px solid var(--border);border-radius:8px;}
   .lt-config-bar input[type=number]{background:var(--surface2);color:var(--text);border:1px solid var(--border);
     border-radius:6px;padding:6px 10px;font-size:13px;outline:none;}
   .lt-config-bar input[type=number]:focus{border-color:var(--accent);}
+  .lt-toolbar{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;}
+  .lt-toolbar input[type=text]{background:var(--surface2);color:var(--text);border:1px solid var(--border);
+    border-radius:6px;padding:5px 10px;font-size:12px;outline:none;width:160px;}
+  .lt-toolbar input[type=text]:focus{border-color:var(--accent);}
+  .lt-toolbar select{background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:5px 8px;font-size:12px;outline:none;}
+  .lt-layout-btn{padding:4px 12px;font-size:12px;background:var(--surface2);border:1px solid var(--border);
+    border-radius:5px;color:var(--text-dim);cursor:pointer;transition:all .15s;}
+  .lt-layout-btn.active{background:rgba(108,123,255,.15);border-color:var(--accent);color:var(--accent);}
   .lt-status-dot{width:9px;height:9px;border-radius:50%;background:var(--border);transition:background .3s;}
   .lt-status-dot.listening{background:var(--ok);box-shadow:0 0 8px var(--ok);animation:ltPulse 1.5s ease-in-out infinite;}
   @keyframes ltPulse{0%,100%{box-shadow:0 0 4px var(--ok);}50%{box-shadow:0 0 12px var(--ok);}}
-  .lt-stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
-  .lt-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 16px;
+  .lt-main-row{display:flex;gap:12px;align-items:flex-start;}
+  .lt-canvas-col{flex:1;min-width:0;}
+  .lt-side-panel{width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;}
+  .lt-talkers{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;}
+  .lt-talkers h4{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:10px;}
+  .lt-talker-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:11px;}
+  .lt-talker-ip{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:monospace;}
+  .lt-talker-bar-wrap{width:50px;background:var(--surface);border-radius:999px;height:4px;overflow:hidden;flex-shrink:0;}
+  .lt-talker-bar{height:100%;border-radius:999px;}
+  .lt-talker-count{font-size:10px;color:var(--text-dim);min-width:28px;text-align:right;}
+  .lt-stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .lt-stat{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px 14px;
     text-align:center;display:flex;flex-direction:column;gap:2px;}
   .lt-stat span{font-size:20px;font-weight:700;color:var(--text);}
   .lt-stat small{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);}
@@ -800,39 +818,79 @@
           <div class="lt-stat"><span id="lt-s-edges">0</span><small>Connections</small></div>
           <div class="lt-stat lt-allow"><span id="lt-s-allow">0</span><small>Allow</small></div>
           <div class="lt-stat lt-drop"><span id="lt-s-drop">0</span><small>Drop</small></div>
+          <div class="lt-stat"><span id="lt-s-bytes">—</span><small>Bytes</small></div>
           <div class="lt-stat"><span id="lt-s-eps">—</span><small>Evt/s</small></div>
         </div>
 
-        <!-- Canvas -->
-        <div class="lt-canvas-wrap" id="lt-canvas-wrap">
-          <canvas id="lt-canvas"></canvas>
-          <div class="lt-overlay" id="lt-overlay">
-            <div style="font-size:32px;margin-bottom:12px;opacity:.4">◎</div>
-            <div style="font-weight:700;margin-bottom:6px">Live Traffic Map</div>
-            <div style="font-size:12px;color:var(--text-dim)">Start the syslog listener, then point your firewall to this host on the configured UDP port.<br>
-            Parsed connections will appear here as a live force-directed graph.</div>
-          </div>
+        <!-- Toolbar -->
+        <div class="lt-toolbar">
+          <input type="text" id="lt-search" placeholder="🔍 Filter IP…" oninput="ltSearchNode()" style="width:150px">
+          <button class="lt-layout-btn active" id="lt-btn-force" onclick="ltSetLayout('force')">⬡ Force</button>
+          <button class="lt-layout-btn" id="lt-btn-bipartite" onclick="ltSetLayout('bipartite')">◫ Internal | External</button>
+          <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
+            <input type="checkbox" id="lt-particles" checked> Particles
+          </label>
+          <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
+            <input type="checkbox" id="lt-show-drop" checked onchange="ltRedraw()"> Drops
+          </label>
+          <label style="font-size:12px;color:var(--text-dim);display:flex;align-items:center;gap:5px">
+            <input type="checkbox" id="lt-show-svc" checked> Services
+          </label>
+          <select id="lt-window" onchange="ltApplyWindow()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:12px;outline:none;">
+            <option value="60">Last 1 min</option>
+            <option value="300" selected>Last 5 min</option>
+            <option value="900">Last 15 min</option>
+            <option value="3600">Last 1 hr</option>
+            <option value="0">All</option>
+          </select>
+          <button class="sec" style="padding:4px 12px;font-size:12px" onclick="ltFitView()">⊡ Fit</button>
+          <button class="sec" style="padding:4px 12px;font-size:12px" onclick="ltClear()">Clear</button>
+          <button class="sec" onclick="ltExportCSV()" id="btn-lt-export" disabled style="padding:4px 12px;font-size:12px">Export CSV</button>
         </div>
 
-        <!-- Legend -->
-        <div class="lt-legend">
-          <span><i style="background:rgba(77,255,145,.5);border:1px solid #4dff91"></i>Allow</span>
-          <span><i style="background:rgba(255,77,77,.5);border:1px solid #ff4d4d"></i>Drop / Reject</span>
-          <span><i style="background:rgba(77,166,255,.5);border:1px solid #4da6ff"></i>Internal IP</span>
-          <span><i style="background:rgba(245,200,66,.5);border:1px solid #f5c842"></i>External IP</span>
-          <span style="color:var(--text-dim);font-size:11px">Node size = activity level · Line thickness = connection count · Drag node to pin · Double-click to unpin</span>
+        <!-- Canvas + side panel -->
+        <div class="lt-main-row">
+          <div class="lt-canvas-col">
+            <div class="lt-canvas-wrap" id="lt-canvas-wrap">
+              <canvas id="lt-canvas"></canvas>
+              <div class="lt-overlay" id="lt-overlay">
+                <div style="font-size:32px;margin-bottom:12px;opacity:.4">◎</div>
+                <div style="font-weight:700;margin-bottom:6px">Live Traffic Map</div>
+                <div style="font-size:12px;color:var(--text-dim)">Start the syslog listener, then point your firewall to this host on the configured UDP port.<br>
+                Parsed connections will appear here as a live force-directed graph.</div>
+              </div>
+            </div>
+            <!-- Legend -->
+            <div class="lt-legend" style="margin-top:8px">
+              <span><i style="background:rgba(77,255,145,.5);border:1px solid #4dff91"></i>Allow</span>
+              <span><i style="background:rgba(255,77,77,.5);border:1px solid #ff4d4d"></i>Drop</span>
+              <span><i style="background:rgba(77,166,255,.5);border:1px solid #4da6ff"></i>Internal</span>
+              <span><i style="background:rgba(245,200,66,.5);border:1px solid #f5c842"></i>External</span>
+              <span style="color:var(--text-dim);font-size:10px">Drag→pin · Dbl-click→unpin · Scroll→zoom · ⊡ Fit</span>
+            </div>
+          </div>
+
+          <!-- Side panel -->
+          <div class="lt-side-panel">
+            <div class="lt-talkers" id="lt-talkers">
+              <h4>Top Talkers</h4>
+              <div id="lt-talkers-list"><span style="color:var(--text-dim);font-size:11px">No data yet…</span></div>
+            </div>
+            <div class="lt-talkers" id="lt-top-drops">
+              <h4>Top Drops</h4>
+              <div id="lt-drops-list"><span style="color:var(--text-dim);font-size:11px">No data yet…</span></div>
+            </div>
+          </div>
         </div>
 
         <!-- Tooltip -->
         <div class="topo-tooltip" id="lt-tt"></div>
 
         <!-- Event log -->
-        <div style="margin-top:16px">
+        <div style="margin-top:14px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
             <h3 style="margin:0">Recent Events</h3>
-            <div class="btn-row">
-              <button class="sec" onclick="ltExportCSV()" id="btn-lt-export" disabled>Export CSV</button>
-            </div>
+            <input type="text" id="lt-log-filter" placeholder="Filter…" oninput="ltFilterLog()" style="background:var(--surface2);color:var(--text);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:11px;outline:none;width:140px">
           </div>
           <div class="lt-event-log" id="lt-event-log"><span style="color:var(--text-dim);font-size:12px">No events yet…</span></div>
         </div>
@@ -2013,10 +2071,10 @@ function exportDiscoveryCSV() {
 // LIVE TRAFFIC — force-directed graph from syslog events
 // ════════════════════════════════════════════════════════════════
 const LT = {
-  events: [],        // parsed log events
-  nodes: {},         // ip → {ip,x,y,vx,vy,count,allow,drop,bytes,lastSeen,internal}
-  edges: {},         // key → {src,dst,count,allow,drop,service,lastSeen}
-  eventLog: [],      // recent 200 events for the event log table
+  events: [],
+  nodes: {},
+  edges: {},
+  eventLog: [],
   sse: null,
   animId: null,
   canvas: null,
@@ -2026,7 +2084,11 @@ const LT = {
   drag: false, dragNode: null, dragSX: 0, dragSY: 0,
   hovNode: null,
   totalEvents: 0, allowCount: 0, dropCount: 0,
-  epsWindow: [], // timestamps for EPS calc
+  epsWindow: [],
+  particles: {},       // edge key → [{t:0..1}]
+  layoutMode: 'force', // 'force' | 'bipartite'
+  searchQuery: '',
+  totalBytes: 0,
 };
 
 const RFC1918 = [
@@ -2117,11 +2179,12 @@ function ltApplySnapshot(snap) {
   LT.totalEvents = snap.totalEvents || 0;
   LT.allowCount = snap.nodes?.reduce((s,n)=>s+(n.allow||0),0) || 0;
   LT.dropCount  = snap.nodes?.reduce((s,n)=>s+(n.drop||0),0) || 0;
+  LT.totalBytes = snap.nodes?.reduce((s,n)=>s+(n.bytes||0),0) || 0;
 
-  // Show countdown to next snapshot
   ltStartCountdown();
   ltUpdateStats();
   ltUpdateEventLog();
+  ltUpdateTopTalkers();
   if (Object.keys(LT.nodes).length) {
     document.getElementById('lt-overlay')?.classList.add('hidden');
     document.getElementById('btn-lt-export').disabled = false;
@@ -2157,31 +2220,40 @@ function ltApplyWindow() { ltUpdateStats(); }
 function ltClear() {
   fetch('/api/syslog/clear', { method:'POST' }).catch(()=>{});
   LT.nodes={}; LT.edges={}; LT.eventLog=[];
-  LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.epsWindow=[];
+  LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.totalBytes=0;
+  LT.epsWindow=[]; LT.particles={};
   ltUpdateStats();
   ltUpdateEventLog();
+  ltUpdateTopTalkers();
   document.getElementById('lt-overlay')?.classList.remove('hidden');
   document.getElementById('btn-lt-export').disabled = true;
+}
+
+function ltFmtBytes(b) {
+  if (!b) return '—';
+  if (b<1024) return b+'B';
+  if (b<1048576) return (b/1024).toFixed(1)+'K';
+  if (b<1073741824) return (b/1048576).toFixed(1)+'M';
+  return (b/1073741824).toFixed(1)+'G';
 }
 
 function ltUpdateStats() {
   const nodes = ltVisibleNodes();
   const edges = ltVisibleEdges();
-  document.getElementById('lt-s-total').textContent = LT.totalEvents;
+  document.getElementById('lt-s-total').textContent = LT.totalEvents.toLocaleString();
   document.getElementById('lt-s-nodes').textContent = nodes.length;
   document.getElementById('lt-s-edges').textContent = edges.length;
-  document.getElementById('lt-s-allow').textContent = LT.allowCount;
-  document.getElementById('lt-s-drop').textContent = LT.dropCount;
+  document.getElementById('lt-s-allow').textContent = LT.allowCount.toLocaleString();
+  document.getElementById('lt-s-drop').textContent  = LT.dropCount.toLocaleString();
+  document.getElementById('lt-s-bytes').textContent = ltFmtBytes(LT.totalBytes);
   document.getElementById('lt-s-eps').textContent = '—';
   document.getElementById('tb-livetraffic').textContent = LT.listening ? '●' : '○';
   document.getElementById('tb-livetraffic').style.color = LT.listening ? 'var(--ok)' : '';
 }
 
-function ltUpdateEventLog() {
-  const log = document.getElementById('lt-event-log');
-  if (!log) return;
-  if (!LT.eventLog.length) { log.innerHTML = '<span style="color:var(--text-dim);font-size:12px;padding:8px 12px;display:block">No events yet…</span>'; return; }
-  log.innerHTML = LT.eventLog.slice(0,60).map(ev => {
+function ltRenderEventRows(evs) {
+  if (!evs.length) return '<span style="color:var(--text-dim);font-size:12px;padding:8px 12px;display:block">No events…</span>';
+  return evs.map(ev => {
     const allow = /accept|allow|permit/i.test(ev.action||'');
     const t = new Date(ev.ts).toLocaleTimeString();
     return `<div class="lt-event-row">
@@ -2191,8 +2263,26 @@ function ltUpdateEventLog() {
       <span style="color:var(--text-dim)">→</span>
       <span class="lt-ev-dst">${esc(ev.dst)}</span>
       <span class="lt-ev-svc">${esc(ev.service||'')}</span>
+      ${ev.bytes?`<span style="color:var(--text-dim);font-size:10px">${ltFmtBytes(ev.bytes)}</span>`:''}
     </div>`;
   }).join('');
+}
+
+function ltUpdateEventLog() {
+  const log = document.getElementById('lt-event-log');
+  if (!log) return;
+  if (!LT.eventLog.length) { log.innerHTML = '<span style="color:var(--text-dim);font-size:12px;padding:8px 12px;display:block">No events yet…</span>'; return; }
+  log.innerHTML = ltRenderEventRows(LT.eventLog.slice(0,80));
+}
+
+function ltFilterLog() {
+  const q = (document.getElementById('lt-log-filter')?.value||'').toLowerCase().trim();
+  const log = document.getElementById('lt-event-log');
+  if (!log) return;
+  const evs = q
+    ? LT.eventLog.filter(ev=>(ev.src+ev.dst+(ev.service||'')+(ev.action||'')).toLowerCase().includes(q))
+    : LT.eventLog;
+  log.innerHTML = ltRenderEventRows(evs.slice(0,80));
 }
 
 // ── Canvas rendering ──────────────────────────────────────────
@@ -2231,169 +2321,298 @@ function ltVisibleEdges() {
   });
 }
 
-// Simple force-directed layout tick
+// ── Layout ────────────────────────────────────────────────────
+function ltSetLayout(mode) {
+  LT.layoutMode = mode;
+  document.getElementById('lt-btn-force').classList.toggle('active', mode==='force');
+  document.getElementById('lt-btn-bipartite').classList.toggle('active', mode==='bipartite');
+  // Unpin all to let layout re-settle
+  Object.values(LT.nodes).forEach(n=>{ n.pinned=false; n.vx=0; n.vy=0; });
+}
+
+function ltFitView() {
+  const nodes = ltVisibleNodes();
+  if (!nodes.length) return;
+  const W = LT.canvas.width, H = LT.canvas.height;
+  let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+  for (const n of nodes) {
+    const r = ltNodeRadius(n);
+    minX=Math.min(minX,n.x-r); maxX=Math.max(maxX,n.x+r);
+    minY=Math.min(minY,n.y-r); maxY=Math.max(maxY,n.y+r);
+  }
+  const pad=40, gw=maxX-minX||1, gh=maxY-minY||1;
+  const scale=Math.min((W-pad*2)/gw,(H-pad*2)/gh,2);
+  LT.camScale=scale;
+  LT.camX=W/2-scale*(minX+gw/2);
+  LT.camY=H/2-scale*(minY+gh/2);
+}
+
+function ltSearchNode() {
+  LT.searchQuery = (document.getElementById('lt-search')?.value||'').toLowerCase().trim();
+}
+
+// ── Force-directed layout tick ─────────────────────────────────
 function ltForceTick(nodes, edges) {
   const W = LT.canvas.width, H = LT.canvas.height;
-  const REPEL = 3500, ATTRACT = 0.012, CENTER = 0.006, DAMP = 0.82;
-  const CENTER_X = W/2 + LT.camX/LT.camScale*0, CENTER_Y = H/2;
+  const REPEL = 4000, ATTRACT = 0.014, DAMP = 0.80;
+  const bipartite = LT.layoutMode === 'bipartite';
 
-  // Repulsion between all nodes
+  const nodeMap = {};
+  nodes.forEach(n=>nodeMap[n.ip]=n);
+
+  // Repulsion
   for (let i=0;i<nodes.length;i++) {
     for (let j=i+1;j<nodes.length;j++) {
       const a=nodes[i], b=nodes[j];
       const dx=b.x-a.x, dy=b.y-a.y;
       const d=Math.max(Math.hypot(dx,dy),1);
       const f=REPEL/(d*d);
-      a.vx -= dx/d*f; a.vy -= dy/d*f;
-      b.vx += dx/d*f; b.vy += dy/d*f;
+      a.vx-=dx/d*f; a.vy-=dy/d*f;
+      b.vx+=dx/d*f; b.vy+=dy/d*f;
     }
-    // Center pull
-    nodes[i].vx += (CENTER_X - nodes[i].x)*CENTER;
-    nodes[i].vy += (CENTER_Y - nodes[i].y)*CENTER;
+    // Center/side pull
+    const n=nodes[i];
+    if (bipartite) {
+      const targetX = n.internal ? W*0.28 : W*0.72;
+      n.vx += (targetX - n.x) * 0.012;
+      n.vy += (H/2 - n.y) * 0.005;
+    } else {
+      n.vx += (W/2 - n.x) * 0.006;
+      n.vy += (H/2 - n.y) * 0.006;
+    }
   }
 
   // Edge attraction
-  const nodeMap = {};
-  nodes.forEach(n=>nodeMap[n.ip]=n);
   for (const e of edges) {
     const a=nodeMap[e.src], b=nodeMap[e.dst];
     if (!a||!b) continue;
     const dx=b.x-a.x, dy=b.y-a.y;
-    a.vx += dx*ATTRACT; a.vy += dy*ATTRACT;
-    b.vx -= dx*ATTRACT; b.vy -= dy*ATTRACT;
+    a.vx+=dx*ATTRACT; a.vy+=dy*ATTRACT;
+    b.vx-=dx*ATTRACT; b.vy-=dy*ATTRACT;
   }
 
-  // Integrate + damp (skip actively dragged and pinned nodes)
+  // Integrate
   for (const n of nodes) {
-    if (n === LT.dragNode || n.pinned) continue;
-    n.vx *= DAMP; n.vy *= DAMP;
-    n.x += n.vx; n.y += n.vy;
-    n.x = Math.max(30, Math.min(W-30, n.x));
-    n.y = Math.max(30, Math.min(H-30, n.y));
+    if (n===LT.dragNode||n.pinned) continue;
+    n.vx*=DAMP; n.vy*=DAMP;
+    n.x+=n.vx; n.y+=n.vy;
+    n.x=Math.max(36,Math.min(W-36,n.x));
+    n.y=Math.max(36,Math.min(H-36,n.y));
   }
 }
 
-// Node radius: fixed base so IP text always fits, slight growth for high-activity nodes
+// ── Particles ─────────────────────────────────────────────────
+function ltTickParticles(edges) {
+  const speed = 0.006;
+  for (const e of edges) {
+    const key = e.src+'→'+e.dst;
+    if (!LT.particles[key]) {
+      // spawn 1-3 particles per active edge
+      const count = Math.min(3, 1+Math.floor(Math.log2((e.allow||0)+(e.drop||0)+1)));
+      LT.particles[key] = Array.from({length:count},(_,i)=>({ t: i/count }));
+    }
+    for (const p of LT.particles[key]) {
+      p.t += speed * (1 + Math.log10((e.allow||0)+(e.drop||0)+1)*0.3);
+      if (p.t >= 1) p.t -= 1;
+    }
+  }
+  // prune orphaned edge particles
+  const edgeKeys = new Set(edges.map(e=>e.src+'→'+e.dst));
+  for (const k of Object.keys(LT.particles)) { if (!edgeKeys.has(k)) delete LT.particles[k]; }
+}
+
+// Node radius
 function ltNodeRadius(n) {
-  return Math.min(32 + Math.sqrt((n.allow||0)+(n.drop||0)) * 1.2, 52);
+  return Math.min(28 + Math.sqrt((n.allow||0)+(n.drop||0)) * 1.4, 54);
 }
 
 function ltDraw() {
   if (!LT.ctx) return;
   const ctx = LT.ctx, W = LT.canvas.width, H = LT.canvas.height;
+  const now = Date.now();
   ctx.clearRect(0,0,W,H);
 
-  // Dark grid
-  ctx.strokeStyle='rgba(46,50,80,0.25)'; ctx.lineWidth=0.5;
-  for(let x=0;x<W;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
-  for(let y=0;y<H;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  // Background grid
+  ctx.save();
+  ctx.strokeStyle='rgba(46,50,80,0.2)'; ctx.lineWidth=0.5;
+  for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+  ctx.restore();
+
+  // Bipartite zone labels
+  if (LT.layoutMode==='bipartite') {
+    ctx.save();
+    ctx.font='bold 11px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+    ctx.fillStyle='rgba(77,166,255,.2)';
+    ctx.fillRect(0,0,W*0.45,H);
+    ctx.fillStyle='rgba(77,255,145,.08)';
+    ctx.fillRect(W*0.55,0,W*0.45,H);
+    ctx.fillStyle='rgba(77,166,255,.4)';
+    ctx.fillText('INTERNAL', W*0.22, 10);
+    ctx.fillStyle='rgba(77,255,145,.4)';
+    ctx.fillText('EXTERNAL', W*0.78, 10);
+    ctx.restore();
+  }
 
   const nodes = ltVisibleNodes();
   const edges = ltVisibleEdges();
   const nodeMap = {}; nodes.forEach(n=>nodeMap[n.ip]=n);
+  const showParticles = document.getElementById('lt-particles')?.checked ?? true;
+  const showSvc = document.getElementById('lt-show-svc')?.checked ?? true;
+  const winSec = parseInt(document.getElementById('lt-window')?.value)||300;
+  const fadeWindow = winSec ? winSec*1000 : 600000;
 
   ltForceTick(nodes, edges);
+  if (showParticles) ltTickParticles(edges);
+
+  // Neighbour set for hover-dimming
+  const hovNeighbours = new Set();
+  const hovEdgeKeys = new Set();
+  if (LT.hovNode) {
+    hovNeighbours.add(LT.hovNode.ip);
+    for (const e of edges) {
+      if (e.src===LT.hovNode.ip||e.dst===LT.hovNode.ip) {
+        hovNeighbours.add(e.src); hovNeighbours.add(e.dst);
+        hovEdgeKeys.add(e.src+'→'+e.dst);
+      }
+    }
+  }
+  const dimming = LT.hovNode != null;
 
   ctx.save();
   ctx.translate(LT.camX, LT.camY);
   ctx.scale(LT.camScale, LT.camScale);
 
-  const now = Date.now();
-
-  // ── Draw edges (lines between circles) ───────────────────────
+  // ── Edges ──────────────────────────────────────────────────
   for (const e of edges) {
-    const a = nodeMap[e.src], b = nodeMap[e.dst];
-    if (!a || !b || a === b) continue;
-    const ra = ltNodeRadius(a), rb = ltNodeRadius(b);
+    const a=nodeMap[e.src], b=nodeMap[e.dst];
+    if (!a||!b||a===b) continue;
+    const ra=ltNodeRadius(a), rb=ltNodeRadius(b);
+    const dx=b.x-a.x, dy=b.y-a.y;
+    const dist=Math.hypot(dx,dy)||1;
+    const ux=dx/dist, uy=dy/dist;
+    const x1=a.x+ux*ra, y1=a.y+uy*ra;
+    const x2=b.x-ux*(rb+7), y2=b.y-uy*(rb+7);
 
-    // Direction vector, shorten to circle edge
-    const dx = b.x-a.x, dy = b.y-a.y;
-    const dist = Math.hypot(dx,dy) || 1;
-    const ux = dx/dist, uy = dy/dist;
-    const x1 = a.x + ux*ra, y1 = a.y + uy*ra;
-    const x2 = b.x - ux*(rb+8), y2 = b.y - uy*(rb+8); // +8 for arrowhead gap
+    const hasAllow=e.allow>0, hasDrop=e.drop>0;
+    const col=hasDrop&&!hasAllow?'#ff4d4d':hasAllow&&hasDrop?'#f5c842':'#4dff91';
 
-    const hasAllow = e.allow > 0, hasDrop = e.drop > 0;
-    const col = hasDrop && !hasAllow ? '#ff4d4d'
-              : hasAllow && hasDrop  ? '#f5c842'
-              :                        '#4dff91';
-    const alpha = 0.55;
-    const thick = Math.min(1.2 + Math.log10((e.allow||0)+(e.drop||0)+1)*1.5, 5);
+    // Freshness alpha (1.0 = just seen, 0.15 = about to expire)
+    const age = now - (e.lastSeen||0);
+    const freshness = Math.max(0.15, 1 - age/fadeWindow);
+    const isHovEdge = hovEdgeKeys.has(e.src+'→'+e.dst);
+    const dimAlpha = dimming ? (isHovEdge ? 1.0 : 0.1) : freshness*0.65;
 
-    // Line
-    ctx.beginPath();
-    ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
-    ctx.strokeStyle = col + Math.round(alpha*255).toString(16).padStart(2,'0');
-    ctx.lineWidth = thick;
-    ctx.stroke();
+    const thick=Math.min(1.2+Math.log10((e.allow||0)+(e.drop||0)+1)*1.8, 5.5);
 
-    // Arrowhead at dst end
-    const angle = Math.atan2(dy, dx);
+    ctx.globalAlpha = dimAlpha;
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle=col; ctx.lineWidth=thick; ctx.stroke();
+
+    // Arrowhead
+    const angle=Math.atan2(dy,dx);
     ctx.save();
-    ctx.translate(x2, y2);
-    ctx.rotate(angle);
-    ctx.fillStyle = col;
-    ctx.globalAlpha = alpha + 0.2;
-    ctx.beginPath();
-    ctx.moveTo(8,0); ctx.lineTo(-5,4); ctx.lineTo(-5,-4); ctx.closePath();
+    ctx.translate(x2,y2); ctx.rotate(angle);
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.moveTo(9,0); ctx.lineTo(-5,4); ctx.lineTo(-5,-4); ctx.closePath();
     ctx.fill();
-    ctx.globalAlpha = 1;
     ctx.restore();
 
-    // Count label on edge midpoint
-    if (e.allow+e.drop > 1) {
+    // Service label (only when zoomed enough and checkbox on)
+    if (showSvc && e.service && LT.camScale > 0.65) {
       const mx=(x1+x2)/2, my=(y1+y2)/2;
-      ctx.font='bold 9px monospace';
-      ctx.fillStyle='#e2e4f0';
-      ctx.textAlign='center';
-      ctx.textBaseline='middle';
-      ctx.fillText(e.allow+e.drop, mx, my-7);
+      ctx.font='9px monospace'; ctx.fillStyle=col;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(e.service.slice(0,12), mx, my-8);
     }
+
+    // Count badge
+    if (e.allow+e.drop > 1 && LT.camScale > 0.5) {
+      const mx=(x1+x2)/2, my=(y1+y2)/2;
+      const label = `${e.allow+e.drop}`;
+      ctx.font='bold 9px monospace'; ctx.fillStyle='#e2e4f0';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      const offset = e.service&&showSvc&&LT.camScale>0.65 ? 2 : -7;
+      ctx.fillText(label, mx, my+offset);
+    }
+
+    // Particles
+    if (showParticles) {
+      const parts = LT.particles[e.src+'→'+e.dst] || [];
+      for (const p of parts) {
+        const px=x1+(x2-x1)*p.t, py=y1+(y2-y1)*p.t;
+        ctx.beginPath(); ctx.arc(px,py,2.5,0,Math.PI*2);
+        ctx.fillStyle=col; ctx.globalAlpha=dimAlpha*0.9; ctx.fill();
+      }
+    }
+    ctx.globalAlpha=1;
   }
 
-  // ── Draw nodes (circles with IP inside) ──────────────────────
+  // ── Nodes ──────────────────────────────────────────────────
   for (const n of nodes) {
-    const r = ltNodeRadius(n);
-    const hov = n === LT.hovNode;
-    const count = (n.allow||0)+(n.drop||0);
-    const dropRatio = count ? (n.drop||0)/count : 0;
+    const r=ltNodeRadius(n);
+    const hov=n===LT.hovNode;
+    const count=(n.allow||0)+(n.drop||0);
+    const dropRatio=count?(n.drop||0)/count:0;
+    const isNeighbour=!dimming||hovNeighbours.has(n.ip);
+    const age=now-(n.lastSeen||0);
+    const freshness=Math.max(0.2,1-age/fadeWindow);
+    const nodeAlpha=dimming?(isNeighbour?1.0:0.12):freshness;
 
-    // Color: mostly drops = red, mixed = yellow, mostly allow = blue(int)/teal(ext)
-    const base = dropRatio > 0.6 ? '#ff4d4d'
-               : dropRatio > 0.25 ? '#f5c842'
-               : n.internal ? '#4da6ff' : '#4dff91';
+    const base=dropRatio>0.6?'#ff4d4d':dropRatio>0.25?'#f5c842':n.internal?'#4da6ff':'#4dff91';
 
-    // Outer glow on hover
+    // Search highlight ring
+    const searched=LT.searchQuery&&n.ip.includes(LT.searchQuery);
+    if (searched) {
+      ctx.globalAlpha=0.7;
+      ctx.beginPath(); ctx.arc(n.x,n.y,r+9,0,Math.PI*2);
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    ctx.globalAlpha=nodeAlpha;
+
+    // Activity glow
+    if (count > 0) {
+      const glowR = r + Math.min(count*0.08, 18);
+      const grd = ctx.createRadialGradient(n.x,n.y,r*0.5,n.x,n.y,glowR);
+      grd.addColorStop(0, base+'33'); grd.addColorStop(1, base+'00');
+      ctx.beginPath(); ctx.arc(n.x,n.y,glowR,0,Math.PI*2);
+      ctx.fillStyle=grd; ctx.fill();
+    }
+
+    // Hover ring
     if (hov) {
-      ctx.beginPath(); ctx.arc(n.x, n.y, r+6, 0, Math.PI*2);
-      ctx.strokeStyle = base + '55'; ctx.lineWidth = 4; ctx.stroke();
+      ctx.beginPath(); ctx.arc(n.x,n.y,r+5,0,Math.PI*2);
+      ctx.strokeStyle=base+'66'; ctx.lineWidth=4; ctx.stroke();
     }
 
-    // Circle fill
-    ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.fillStyle = n.internal ? '#0d1525' : '#131a10';
-    ctx.fill();
-    ctx.strokeStyle = base;
-    ctx.lineWidth = hov ? 2.5 : 1.8;
-    ctx.stroke();
+    // Fill circle
+    ctx.beginPath(); ctx.arc(n.x,n.y,r,0,Math.PI*2);
+    const fillGrd = ctx.createRadialGradient(n.x-r*0.3,n.y-r*0.3,0,n.x,n.y,r);
+    fillGrd.addColorStop(0, n.internal?'#172040':'#142818');
+    fillGrd.addColorStop(1, n.internal?'#0a1020':'#0a1408');
+    ctx.fillStyle=fillGrd; ctx.fill();
+    ctx.strokeStyle=base; ctx.lineWidth=hov?2.8:1.8; ctx.stroke();
 
-    // IP address inside circle — always visible
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = base;
-    ctx.font = `bold ${Math.min(11, Math.max(9, r*0.28))}px monospace`;
-    ctx.fillText(n.ip, n.x, n.y - 4);
+    // IP label
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=base;
+    const fs=Math.min(11,Math.max(8,r*0.27));
+    ctx.font=`bold ${fs}px monospace`;
+    ctx.fillText(n.ip,n.x,n.y-5);
 
-    // Activity count below IP
-    ctx.font = `${Math.min(9, Math.max(7, r*0.22))}px sans-serif`;
-    ctx.fillStyle = '#7a7f9a';
-    ctx.fillText(`${n.allow||0}↑ ${n.drop||0}✗`, n.x, n.y + 9);
+    // Stats line
+    ctx.font=`${Math.max(7,fs*0.78)}px sans-serif`;
+    ctx.fillStyle='#9aa0bb';
+    ctx.fillText(`↑${n.allow||0} ✗${n.drop||0}`,n.x,n.y+8);
 
-    // Pinned indicator: small filled dot top-right of circle
+    // Pinned dot
     if (n.pinned) {
-      ctx.beginPath(); ctx.arc(n.x+r*0.7, n.y-r*0.7, 4, 0, Math.PI*2);
-      ctx.fillStyle = '#f5c842'; ctx.fill();
+      ctx.beginPath(); ctx.arc(n.x+r*0.68,n.y-r*0.68,3.5,0,Math.PI*2);
+      ctx.fillStyle='#f5c842'; ctx.fill();
     }
+
+    ctx.globalAlpha=1;
   }
 
   ctx.restore();
@@ -2404,7 +2623,37 @@ function ltAnimLoop() {
   LT.animId = requestAnimationFrame(ltAnimLoop);
 }
 
-function ltRedraw() { /* opts changed, next frame picks up */ }
+function ltRedraw() { /* next frame picks it up */ }
+
+// ── Top talkers panel ─────────────────────────────────────────
+function ltUpdateTopTalkers() {
+  const nodes = ltVisibleNodes();
+  const maxCount = Math.max(1,...nodes.map(n=>(n.allow||0)+(n.drop||0)));
+
+  const sorted = [...nodes].sort((a,b)=>(b.allow+b.drop)-(a.allow+a.drop)).slice(0,8);
+  const sortedDrops = [...nodes].filter(n=>n.drop>0).sort((a,b)=>b.drop-a.drop).slice(0,8);
+
+  const renderList = (items,getCount,getColor) => items.length
+    ? items.map(n=>{
+        const cnt=getCount(n), pct=Math.round(cnt/maxCount*100);
+        return `<div class="lt-talker-row">
+          <span class="lt-talker-ip" title="${esc(n.ip)}">${esc(n.ip)}</span>
+          <div class="lt-talker-bar-wrap"><div class="lt-talker-bar" style="width:${pct}%;background:${getColor(n)}"></div></div>
+          <span class="lt-talker-count">${cnt}</span>
+        </div>`;
+      }).join('')
+    : '<span style="color:var(--text-dim);font-size:11px">None</span>';
+
+  const tColor = n => {
+    const r=(n.drop||0)/Math.max(1,(n.allow||0)+(n.drop||0));
+    return r>0.6?'#ff4d4d':r>0.25?'#f5c842':n.internal?'#4da6ff':'#4dff91';
+  };
+
+  const tl=document.getElementById('lt-talkers-list');
+  const dl=document.getElementById('lt-drops-list');
+  if (tl) tl.innerHTML=renderList(sorted,n=>(n.allow||0)+(n.drop||0),tColor);
+  if (dl) dl.innerHTML=renderList(sortedDrops,n=>n.drop||0,()=>'#ff4d4d');
+}
 
 function ltInitEvents() {
   const c = LT.canvas;
