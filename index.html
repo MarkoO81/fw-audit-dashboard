@@ -117,7 +117,10 @@
   .score-desc{font-size:11px;color:var(--text-dim);margin-top:4px;text-align:center;}
 
   .controls-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;}
-  .ctrl-card{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px 16px;}
+  .ctrl-card{background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:14px 16px;cursor:pointer;transition:border-color .2s,box-shadow .2s;}
+  .ctrl-card:hover{border-color:var(--accent);box-shadow:0 0 0 2px rgba(108,123,255,.15);}
+  .ctrl-card .ctrl-drill{font-size:10px;color:var(--accent);margin-top:6px;opacity:0;transition:opacity .2s;}
+  .ctrl-card:hover .ctrl-drill{opacity:1;}
   .ctrl-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
   .ctrl-name{font-size:12px;font-weight:600;}
   .ctrl-score{font-size:18px;font-weight:700;}
@@ -125,6 +128,28 @@
   .ctrl-bar{background:var(--surface);border-radius:999px;height:5px;overflow:hidden;}
   .ctrl-bar-fill{height:100%;border-radius:999px;transition:width .5s;}
   .ctrl-violations{font-size:11px;color:var(--text-dim);margin-top:6px;}
+
+  /* Compliance drill-down modal */
+  .cdm-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:900;display:flex;align-items:center;justify-content:center;padding:24px;}
+  .cdm-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;width:100%;max-width:860px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;}
+  .cdm-header{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .cdm-title{font-size:15px;font-weight:700;}
+  .cdm-meta{font-size:11px;color:var(--text-dim);margin-top:3px;}
+  .cdm-close{background:none;border:1px solid var(--border);color:var(--text);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:13px;}
+  .cdm-close:hover{background:var(--surface2);}
+  .cdm-body{overflow-y:auto;padding:18px 22px;flex:1;}
+  .cdm-what{background:var(--surface2);border-left:3px solid var(--accent);border-radius:0 6px 6px 0;padding:10px 14px;font-size:12px;color:var(--text-dim);margin-bottom:16px;line-height:1.6;}
+  .cdm-rule-list{display:flex;flex-direction:column;gap:8px;}
+  .cdm-rule{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:10px 14px;display:flex;align-items:flex-start;gap:14px;cursor:pointer;transition:border-color .15s;}
+  .cdm-rule:hover{border-color:var(--accent);}
+  .cdm-rule-num{font-size:11px;color:var(--text-dim);min-width:28px;padding-top:1px;}
+  .cdm-rule-body{flex:1;min-width:0;}
+  .cdm-rule-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .cdm-rule-flags{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;}
+  .cdm-rule-detail{font-size:11px;color:var(--text-dim);margin-top:4px;}
+  .cdm-empty{color:var(--ok);font-size:13px;padding:20px 0;text-align:center;}
+  .cdm-footer{padding:12px 22px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;font-size:12px;color:var(--text-dim);}
+  .cdm-footer button{font-size:12px;padding:5px 14px;}
 
   /* Risk bars */
   .risk-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
@@ -357,9 +382,120 @@
   .lt-ev-src{color:var(--low);}
   .lt-ev-dst{color:var(--medium);}
   .lt-ev-svc{color:var(--text-dim);}
+
+  /* ── Welcome / Platform Login ── */
+  .welcome-overlay{position:fixed;inset:0;z-index:1000;background:var(--bg);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;
+    transition:opacity .4s;}
+  .welcome-overlay.fade-out{opacity:0;pointer-events:none;}
+  .welcome-bg-grid{position:absolute;inset:0;background-image:
+    linear-gradient(rgba(108,123,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(108,123,255,.04) 1px,transparent 1px);
+    background-size:40px 40px;pointer-events:none;}
+  .welcome-glow{position:absolute;top:-180px;left:50%;transform:translateX(-50%);
+    width:600px;height:600px;border-radius:50%;
+    background:radial-gradient(ellipse,rgba(108,123,255,.12) 0%,transparent 70%);
+    pointer-events:none;}
+  .welcome-box{position:relative;background:var(--surface);border:1px solid var(--border);
+    border-radius:16px;padding:48px 44px 36px;width:100%;max-width:420px;
+    box-shadow:0 24px 80px rgba(0,0,0,.5);}
+  .welcome-logo-wrap{display:flex;flex-direction:column;align-items:center;margin-bottom:36px;}
+  .welcome-shield{width:72px;height:72px;margin-bottom:14px;
+    filter:drop-shadow(0 0 18px rgba(108,123,255,.5));}
+  .welcome-title{font-size:26px;font-weight:900;letter-spacing:.5px;
+    background:linear-gradient(90deg,#6c7bff,#a78bfa,#4da6ff);
+    background-size:200% auto;
+    -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+    animation:logoShimmer 4s linear infinite;}
+  .welcome-subtitle{font-size:12px;color:var(--text-dim);margin-top:4px;letter-spacing:1.5px;text-transform:uppercase;}
+  .welcome-form{display:flex;flex-direction:column;gap:14px;}
+  .welcome-form .form-field label{font-size:12px;color:var(--text-dim);font-weight:600;letter-spacing:.3px;}
+  .welcome-form input{background:var(--surface2);border:1px solid var(--border);color:var(--text);
+    border-radius:8px;padding:11px 14px;font-size:14px;outline:none;width:100%;transition:border-color .2s;}
+  .welcome-form input:focus{border-color:var(--accent);}
+  .welcome-btn{margin-top:6px;width:100%;padding:12px;font-size:14px;font-weight:700;
+    background:linear-gradient(135deg,#6c7bff,#a78bfa);color:#fff;border:none;
+    border-radius:8px;cursor:pointer;letter-spacing:.3px;transition:opacity .2s,transform .1s;}
+  .welcome-btn:hover{opacity:.9;}
+  .welcome-btn:active{transform:scale(.98);}
+  .welcome-version{margin-top:28px;font-size:11px;color:var(--text-dim);text-align:center;}
+  .welcome-version a{color:var(--accent);text-decoration:none;}
+  #w-alert{font-size:12px;color:var(--critical);min-height:16px;text-align:center;}
+
+  /* ── Settings tab ── */
+  .integ-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px;}
+  .integ-card{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:20px;
+    transition:border-color .2s;}
+  .integ-card.active{border-color:rgba(108,123,255,.35);}
+  .integ-card-head{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
+  .integ-logo{width:42px;height:42px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+    flex-shrink:0;font-size:20px;}
+  .integ-info{flex:1;min-width:0;}
+  .integ-name{font-size:14px;font-weight:700;}
+  .integ-type{font-size:11px;color:var(--text-dim);margin-top:2px;}
+  .integ-status-dot{width:9px;height:9px;border-radius:50%;background:var(--border);flex-shrink:0;}
+  .integ-status-dot.connected{background:var(--ok);box-shadow:0 0 7px var(--ok);}
+  .integ-status-dot.error{background:var(--critical);}
+  .integ-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;
+    background:rgba(122,127,154,.15);color:var(--text-dim);letter-spacing:.5px;align-self:center;}
+  .integ-desc{font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;}
+  .integ-body{border-top:1px solid var(--border);padding-top:14px;margin-top:4px;}
+  .integ-body .form-grid{margin-bottom:12px;}
+  .integ-coming{text-align:center;padding:16px 0 4px;color:var(--text-dim);font-size:12px;}
+
+  .settings-section{margin-bottom:32px;}
+  .settings-section h2{margin-bottom:14px;}
 </style>
 </head>
 <body>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PLATFORM LOGIN — shown before anything else
+     ══════════════════════════════════════════════════════════════ -->
+<div class="welcome-overlay" id="welcome-overlay">
+  <div class="welcome-bg-grid"></div>
+  <div class="welcome-glow"></div>
+  <div class="welcome-box">
+    <div class="welcome-logo-wrap">
+      <!-- Shield logo (same as header, scaled up) -->
+      <svg class="welcome-shield" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="wsg1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#6c7bff"/><stop offset="100%" stop-color="#a78bfa"/>
+          </linearGradient>
+          <linearGradient id="wsg2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f5c842" stop-opacity=".9"/><stop offset="100%" stop-color="#ff8c42" stop-opacity=".7"/>
+          </linearGradient>
+        </defs>
+        <path d="M32 4L8 14v18c0 14 12 22 24 26 12-4 24-12 24-26V14L32 4z" fill="url(#wsg1)" opacity=".95"/>
+        <path d="M32 10L13 18v14c0 11 9 17 19 20 10-3 19-9 19-20V18L32 10z" fill="#1a1d27" opacity=".55"/>
+        <polyline points="22,32 29,39 42,26" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity=".95"/>
+        <ellipse cx="32" cy="50" rx="6" ry="4" fill="url(#wsg2)" opacity=".85"/>
+        <ellipse cx="32" cy="48" rx="3.5" ry="2.5" fill="#fff" opacity=".4"/>
+      </svg>
+      <div class="welcome-title">AIVERTO-AUDIT</div>
+      <div class="welcome-subtitle">Firewall Security Platform</div>
+    </div>
+
+    <form class="welcome-form" onsubmit="doWelcomeLogin(event)">
+      <div class="form-field">
+        <label>Username</label>
+        <input id="w-user" type="text" placeholder="admin" autocomplete="username" autofocus>
+      </div>
+      <div class="form-field">
+        <label>Password</label>
+        <input id="w-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div id="w-alert"></div>
+      <button type="submit" class="welcome-btn">Sign In →</button>
+    </form>
+
+    <div class="welcome-version">
+      v1.0 &nbsp;·&nbsp; NIS2 / DORA Compliance Edition<br>
+      <span style="opacity:.5">Default: admin / aiverto</span>
+    </div>
+  </div>
+</div>
 
 <header>
   <div class="logo-wrap">
@@ -402,39 +538,8 @@
 
 <main>
 
-  <!-- CONNECT -->
-  <section id="sec-connect">
-    <h2>1 — Connect to Check Point Management API</h2>
-    <div class="panel">
-      <div id="alert-connect" class="alert"></div>
-      <div class="form-grid">
-        <div class="form-field" style="grid-column:span 2">
-          <label>Management Server (IP or hostname)</label>
-          <input id="cp-server" type="text" placeholder="192.168.1.1">
-        </div>
-        <div class="form-field">
-          <label>Port</label>
-          <input id="cp-port" type="number" value="443">
-        </div>
-        <div class="form-field">
-          <label>Domain (optional — MDS)</label>
-          <input id="cp-domain" type="text" placeholder="Leave blank for standalone">
-        </div>
-        <div class="form-field">
-          <label>Username</label>
-          <input id="cp-user" type="text" placeholder="fw-audit">
-        </div>
-        <div class="form-field">
-          <label>Password</label>
-          <input id="cp-pass" type="password" placeholder="••••••••">
-        </div>
-      </div>
-      <div class="btn-row">
-        <button id="btn-connect" onclick="doLogin()">Connect</button>
-        <button class="sec" onclick="loadSample()">Use Sample Data</button>
-      </div>
-    </div>
-  </section>
+  <!-- CONNECT (hidden — form lives in Settings → Integrations) -->
+  <section id="sec-connect" style="display:none"></section>
 
   <!-- SELECT LAYER -->
   <section id="sec-layers" style="display:none">
@@ -483,6 +588,9 @@
       </button>
       <button class="tab-btn" onclick="switchTab('livetraffic')" id="tbtn-livetraffic">
         ◎ Live Traffic <span class="tbadge" id="tb-livetraffic">●</span>
+      </button>
+      <button class="tab-btn" onclick="switchTab('settings')" id="tbtn-settings" style="margin-left:auto">
+        ⚙ Settings
       </button>
     </nav>
 
@@ -754,10 +862,273 @@
       </section>
     </div>
 
+    <!-- ══ SETTINGS ══ -->
+    <div class="tab-pane" id="tab-settings">
+
+      <div class="settings-section">
+        <h2>Integrations &amp; Connectivity</h2>
+        <div class="integ-grid">
+
+          <!-- ── Check Point ── -->
+          <div class="integ-card active" id="integ-card-checkpoint">
+            <div class="integ-card-head">
+              <div class="integ-logo" style="background:rgba(255,77,77,.1)">
+                <!-- CP logo -->
+                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+                  <circle cx="20" cy="20" r="18" fill="#cc0000" opacity=".9"/>
+                  <path d="M14 20h12M20 14v12" stroke="white" stroke-width="3.2" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="integ-info">
+                <div class="integ-name">Check Point</div>
+                <div class="integ-type">Management API · R80 / R81 / R82</div>
+              </div>
+              <div class="integ-status-dot" id="integ-dot-checkpoint"></div>
+            </div>
+            <div class="integ-desc">Connect to a Check Point Management Server (SMS or MDS) to load firewall policies for audit and compliance analysis.</div>
+            <div class="integ-body" id="integ-body-checkpoint">
+              <div id="alert-connect" class="alert"></div>
+              <div class="form-grid">
+                <div class="form-field" style="grid-column:span 2">
+                  <label>Management Server (IP or hostname)</label>
+                  <input id="cp-server" type="text" placeholder="192.168.1.1">
+                </div>
+                <div class="form-field">
+                  <label>Port</label>
+                  <input id="cp-port" type="number" value="443">
+                </div>
+                <div class="form-field">
+                  <label>Domain (optional — MDS)</label>
+                  <input id="cp-domain" type="text" placeholder="Leave blank for standalone">
+                </div>
+                <div class="form-field">
+                  <label>Username</label>
+                  <input id="cp-user" type="text" placeholder="fw-audit">
+                </div>
+                <div class="form-field">
+                  <label>Password</label>
+                  <input id="cp-pass" type="password" placeholder="••••••••">
+                </div>
+              </div>
+              <div class="btn-row">
+                <button id="btn-connect" onclick="doLogin()">Connect</button>
+                <button class="sec" onclick="loadSample()">Use Sample Data</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── Fortinet ── -->
+          <div class="integ-card" id="integ-card-fortinet">
+            <div class="integ-card-head">
+              <div class="integ-logo" style="background:rgba(255,140,66,.1)">
+                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+                  <rect x="4" y="10" width="32" height="20" rx="4" fill="#ee3124" opacity=".9"/>
+                  <path d="M13 20h6v-5l8 5-8 5v-5h-6z" fill="white"/>
+                </svg>
+              </div>
+              <div class="integ-info">
+                <div class="integ-name">Fortinet</div>
+                <div class="integ-type">FortiManager / FortiGate API</div>
+              </div>
+              <span class="integ-badge">PLANNED</span>
+            </div>
+            <div class="integ-desc">Integrate with FortiManager or FortiGate REST API to audit FortiOS firewall policies across your Fortinet estate.</div>
+            <div class="integ-coming">🔒 Support planned for Q3 2025 — <a href="#" style="color:var(--accent);text-decoration:none">Request early access</a></div>
+          </div>
+
+          <!-- ── Palo Alto ── -->
+          <div class="integ-card" id="integ-card-paloalto">
+            <div class="integ-card-head">
+              <div class="integ-logo" style="background:rgba(77,166,255,.1)">
+                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+                  <circle cx="20" cy="20" r="16" fill="none" stroke="#00c0e8" stroke-width="2.5"/>
+                  <path d="M12 20h4l3-6 4 12 3-6h4" stroke="#00c0e8" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                </svg>
+              </div>
+              <div class="integ-info">
+                <div class="integ-name">Palo Alto Networks</div>
+                <div class="integ-type">Panorama / PAN-OS XML API</div>
+              </div>
+              <span class="integ-badge">PLANNED</span>
+            </div>
+            <div class="integ-desc">Connect to Panorama or directly to a PAN-OS firewall to audit security policies, zones, and address objects.</div>
+            <div class="integ-coming">🔒 Support planned for Q3 2025 — <a href="#" style="color:var(--accent);text-decoration:none">Request early access</a></div>
+          </div>
+
+          <!-- ── Cisco ── -->
+          <div class="integ-card" id="integ-card-cisco">
+            <div class="integ-card-head">
+              <div class="integ-logo" style="background:rgba(77,255,145,.08)">
+                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+                  <g fill="#049fd9">
+                    <rect x="7"  y="16" width="4" height="9" rx="1"/>
+                    <rect x="13" y="12" width="4" height="13" rx="1"/>
+                    <rect x="19" y="9"  width="4" height="16" rx="1"/>
+                    <rect x="25" y="12" width="4" height="13" rx="1"/>
+                    <rect x="31" y="16" width="4" height="9" rx="1" opacity=".7"/>
+                  </g>
+                </svg>
+              </div>
+              <div class="integ-info">
+                <div class="integ-name">Cisco</div>
+                <div class="integ-type">FMC / ASA / Firepower REST API</div>
+              </div>
+              <span class="integ-badge">PLANNED</span>
+            </div>
+            <div class="integ-desc">Integrate with Cisco Firepower Management Center (FMC), ASA, or Firepower Threat Defense to retrieve and audit access control policies.</div>
+            <div class="integ-coming">🔒 Support planned for Q4 2025 — <a href="#" style="color:var(--accent);text-decoration:none">Request early access</a></div>
+          </div>
+
+          <!-- ── Generic Syslog / SIEM ── -->
+          <div class="integ-card active" id="integ-card-syslog">
+            <div class="integ-card-head">
+              <div class="integ-logo" style="background:rgba(108,123,255,.12)">
+                <svg viewBox="0 0 40 40" width="32" height="32" fill="none">
+                  <rect x="6" y="8" width="28" height="24" rx="4" stroke="#6c7bff" stroke-width="2" fill="none"/>
+                  <path d="M12 16h16M12 20h10M12 24h13" stroke="#6c7bff" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="integ-info">
+                <div class="integ-name">Syslog / SIEM</div>
+                <div class="integ-type">UDP syslog receiver · CEF · JSON</div>
+              </div>
+              <div class="integ-status-dot" id="integ-dot-syslog"></div>
+            </div>
+            <div class="integ-desc">Receive syslog traffic from any firewall or network device. Supports Check Point R82, CEF, and key=value formats. Visualised in the Live Traffic tab.</div>
+            <div class="integ-body" style="margin-top:4px">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div class="form-field" style="flex:0 0 130px">
+                  <label>UDP Port</label>
+                  <input type="number" id="st-syslog-port" value="5140">
+                </div>
+                <div class="form-field" style="flex:0 0 140px">
+                  <label>Push interval</label>
+                  <select id="st-syslog-interval" style="background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:13px;outline:none;">
+                    <option value="1">Every 1s</option>
+                    <option value="2">Every 2s</option>
+                    <option value="5" selected>Every 5s</option>
+                    <option value="10">Every 10s</option>
+                    <option value="30">Every 30s</option>
+                  </select>
+                </div>
+                <div style="align-self:flex-end;padding-bottom:1px">
+                  <button onclick="settingsSyslogApply()">Apply</button>
+                </div>
+              </div>
+              <div style="margin-top:10px;font-size:12px;color:var(--text-dim)">
+                Configure, then start the listener in the <button class="sec" style="padding:2px 10px;font-size:11px" onclick="switchTab('livetraffic')">Live Traffic ↗</button> tab.
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /integ-grid -->
+      </div><!-- /settings-section -->
+
+      <div class="settings-section">
+        <h2>Platform</h2>
+        <div class="panel" style="max-width:460px">
+          <div class="form-field" style="margin-bottom:14px">
+            <label>Platform Username</label>
+            <input id="st-platform-user" type="text" placeholder="admin" style="max-width:280px">
+          </div>
+          <div class="form-field" style="margin-bottom:14px">
+            <label>New Password</label>
+            <input id="st-platform-pass" type="password" placeholder="Leave blank to keep current" style="max-width:280px">
+          </div>
+          <div class="btn-row">
+            <button onclick="savePlatformCreds()">Save Changes</button>
+            <button class="sec" onclick="platformLogout()">Sign Out</button>
+          </div>
+          <div id="st-platform-msg" style="margin-top:8px;font-size:12px;color:var(--ok)"></div>
+        </div>
+      </div>
+
+    </div><!-- /tab-settings -->
+
   </div><!-- /dashboard -->
 </main>
 
 <script>
+// ════════════════════════════════════════════════════════════════
+// PLATFORM LOGIN
+// ════════════════════════════════════════════════════════════════
+(function initWelcome() {
+  // Check if already logged in this session
+  if (sessionStorage.getItem('aiverto_logged_in') === '1') {
+    document.getElementById('welcome-overlay').style.display = 'none';
+    showMainApp();
+  }
+})();
+
+function doWelcomeLogin(e) {
+  e.preventDefault();
+  const user = document.getElementById('w-user').value.trim();
+  const pass = document.getElementById('w-pass').value;
+  const alert = document.getElementById('w-alert');
+
+  // Load saved credentials (default admin/aiverto on first run)
+  const saved = JSON.parse(localStorage.getItem('aiverto_creds') || '{"user":"admin","pass":"aiverto"}');
+
+  if (!user || !pass) { alert.textContent = 'Please enter username and password.'; return; }
+  if (user !== saved.user || pass !== saved.pass) {
+    alert.textContent = 'Invalid username or password.';
+    document.getElementById('w-pass').value = '';
+    return;
+  }
+
+  alert.textContent = '';
+  sessionStorage.setItem('aiverto_logged_in', '1');
+  const overlay = document.getElementById('welcome-overlay');
+  overlay.classList.add('fade-out');
+  setTimeout(() => { overlay.style.display = 'none'; showMainApp(); }, 380);
+}
+
+function showMainApp() {
+  // Show the dashboard shell; integrations are in Settings
+  document.getElementById('dashboard').style.display = '';
+  switchTab('overview');
+  // Populate settings fields
+  const saved = JSON.parse(localStorage.getItem('aiverto_creds') || '{"user":"admin"}');
+  const el = document.getElementById('st-platform-user');
+  if (el) el.value = saved.user || 'admin';
+}
+
+function savePlatformCreds() {
+  const user = document.getElementById('st-platform-user').value.trim();
+  const pass = document.getElementById('st-platform-pass').value;
+  const msg  = document.getElementById('st-platform-msg');
+  if (!user) { msg.style.color='var(--critical)'; msg.textContent='Username cannot be empty.'; return; }
+  const existing = JSON.parse(localStorage.getItem('aiverto_creds') || '{"user":"admin","pass":"aiverto"}');
+  const newCreds = { user, pass: pass || existing.pass };
+  localStorage.setItem('aiverto_creds', JSON.stringify(newCreds));
+  msg.style.color = 'var(--ok)';
+  msg.textContent = 'Saved.';
+  document.getElementById('st-platform-pass').value = '';
+  setTimeout(()=>msg.textContent='', 3000);
+}
+
+function platformLogout() {
+  sessionStorage.removeItem('aiverto_logged_in');
+  location.reload();
+}
+
+// ── Settings helpers ──────────────────────────────────────────────
+function settingsSyslogApply() {
+  // Sync values into the Live Traffic tab selectors
+  const port = document.getElementById('st-syslog-port')?.value;
+  const intv = document.getElementById('st-syslog-interval')?.value;
+  if (port) { const el=document.getElementById('lt-rx-port'); if(el) el.value=port; }
+  if (intv) { const el=document.getElementById('lt-interval'); if(el) el.value=intv; }
+}
+
+// Keep the integration status dot in sync with CP connection state
+function updateIntegDots() {
+  const cpDot = document.getElementById('integ-dot-checkpoint');
+  const slDot = document.getElementById('integ-dot-syslog');
+  if (cpDot) cpDot.className = 'integ-status-dot' + (session.sid ? ' connected' : '');
+  if (slDot) slDot.className = 'integ-status-dot' + (LT?.listening ? ' connected' : '');
+}
+
 // ════════════════════════════════════════════════════════════════
 // RISK DEFINITIONS
 // ════════════════════════════════════════════════════════════════
@@ -836,8 +1207,8 @@ function setConnected(server) {
   document.getElementById('conn-dot').className='dot green';
   document.getElementById('conn-label').textContent='Connected: '+server;
   document.getElementById('btn-disconnect').style.display='';
-  document.getElementById('sec-connect').style.display='none';
   document.getElementById('sec-layers').style.display='';
+  updateIntegDots();
 }
 
 async function disconnect() {
@@ -846,9 +1217,10 @@ async function disconnect() {
   document.getElementById('conn-dot').className='dot';
   document.getElementById('conn-label').textContent='Not connected';
   document.getElementById('btn-disconnect').style.display='none';
-  document.getElementById('dashboard').style.display='none';
   document.getElementById('sec-layers').style.display='none';
-  document.getElementById('sec-connect').style.display='';
+  updateIntegDots();
+  // Stay in dashboard, go to Settings so user can reconnect
+  switchTab('settings');
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -993,19 +1365,77 @@ function calcCompliance(rules) {
   const docViol  = rules.filter(r=>r.flags.some(f=>['NO_DESCRIPTION','NO_NAME'].includes(f))).length;
   const docScore = Math.max(0, Math.round(100 - (docViol/n)*100));
 
-  // Control 4 — Operational Hygiene (NIS2 Art.21.2a, DORA Art.9.1) weight 20%
+  // Control 4 — Operational Hygiene (NIS2 Art.21.2a, DORA Art.9.1) weight 15%
   const hygViol  = rules.filter(r=>r.flags.some(f=>['NO_HITS','DISABLED'].includes(f))).length;
   const hygScore = Math.max(0, Math.round(100 - (hygViol/n)*100));
 
-  const overall = Math.round(accessScore*0.35 + segScore*0.25 + docScore*0.20 + hygScore*0.20);
+  // Control 5 — Logging & Monitoring (NIS2 Art.21.2g) weight 10%
+  // Rules with no name = likely auto-generated / unmonitored; rules with no hits but enabled = unverified
+  const logViol  = rules.filter(r=>r.flags.includes('NO_NAME') || (r.flags.includes('NO_HITS') && !r.flags.includes('DISABLED'))).length;
+  const logScore = Math.max(0, Math.round(100 - (logViol/n)*100));
+
+  // Control 6 — Encryption / Protocol Hygiene (NIS2 Art.21.2h) weight 10%
+  // Proxy: rules explicitly allowing known cleartext services (telnet/ftp/http on port 80/23/21)
+  // We detect via service names containing 'telnet','ftp','http' (non-https) in rule.service fields
+  const encViol  = rules.filter(r => {
+    const svc = ((r.service||'') + ' ' + (r.services||'')).toLowerCase();
+    return /\btelnet\b|\bftp\b|\bhttp\b(?!s)/.test(svc) && r.action === 'Accept';
+  }).length;
+  const encScore = Math.max(0, Math.round(100 - (encViol/n)*200));
+
+  // Control 7 — Least Privilege / Rule Ordering (NIS2 Art.21.2f, CIS Control 12) weight 5%
+  // Broad rules appearing before specific ones = implicit privilege escalation
+  const lpViol   = rules.filter(r=>r.flags.some(f=>['ALL_ANY_ALLOW','BOTH_ANY_ALLOW'].includes(f))).length;
+  const lpScore  = Math.max(0, Math.round(100 - (lpViol/n)*200));
+
+  // Control 8 — Supply Chain / Third-Party Access (NIS2 Art.21.2d) weight 5%
+  // Proxy: any-source rules allowing inbound from external (non-RFC1918) spaces
+  const scViol   = rules.filter(r=>r.flags.includes('ANY_SRC_ALLOW')).length;
+  const scScore  = Math.max(0, Math.round(100 - (scViol/n)*200));
+
+  const overall = Math.round(
+    accessScore*0.30 + segScore*0.20 + docScore*0.15 + hygScore*0.15 +
+    logScore*0.10 + encScore*0.05 + lpScore*0.03 + scScore*0.02
+  );
+
+  // Attach matching rule lists to each control for drill-down
+  const flagRules = (ids) => rules.filter(r=>r.flags.some(f=>ids.includes(f)));
 
   return {
     overall,
     controls: [
-      { id:'access', label:'Access Control',        score:accessScore, violations:accessViol, ref:'NIS2 Art.21.2(f) · DORA Art.9.2',  detail:'Overpermissive allow rules (any-source, any-destination, any-service)' },
-      { id:'seg',    label:'Network Segmentation',  score:segScore,    violations:segViol,    ref:'NIS2 Art.21.2(e) · DORA Art.9.4',  detail:'Excessively broad source/destination subnets (≤/8)' },
-      { id:'doc',    label:'Policy Documentation',  score:docScore,    violations:docViol,    ref:'NIS2 Art.21.1 · DORA Art.8.1',     detail:'Rules missing name or description — required for audit trails' },
-      { id:'hyg',    label:'Operational Hygiene',   score:hygScore,    violations:hygViol,    ref:'NIS2 Art.21.2(a) · DORA Art.9.1',  detail:'Unused rules (zero hits) and disabled rules still in policy' },
+      { id:'access', label:'Access Control',            score:accessScore, violations:accessViol, ref:'NIS2 Art.21.2(f) · DORA Art.9.2',    detail:'Overpermissive allow rules (any-source, any-destination, any-service)',
+        flagIds:['ALL_ANY_ALLOW','BOTH_ANY_ALLOW','ANY_SRC_ALLOW','ANY_DST_ALLOW','ANY_SVC_ALLOW'],
+        what:'Rules granting excessively broad access violate the least-privilege principle required by NIS2 Art.21.2(f) and DORA Art.9.2. Every "any" in a firewall rule is a potential bypass for attackers.',
+        rules: flagRules(['ALL_ANY_ALLOW','BOTH_ANY_ALLOW','ANY_SRC_ALLOW','ANY_DST_ALLOW','ANY_SVC_ALLOW']) },
+      { id:'seg',    label:'Network Segmentation',      score:segScore,    violations:segViol,    ref:'NIS2 Art.21.2(e) · DORA Art.9.4',    detail:'Excessively broad source/destination subnets (≤/8)',
+        flagIds:['BROAD_SUBNET_SRC','BROAD_SUBNET_DST'],
+        what:'NIS2 Art.21.2(e) requires network segmentation to limit lateral movement. Rules targeting /8 or broader subnets defeat the purpose of segmentation and widen the blast radius of a breach.',
+        rules: flagRules(['BROAD_SUBNET_SRC','BROAD_SUBNET_DST']) },
+      { id:'doc',    label:'Policy Documentation',      score:docScore,    violations:docViol,    ref:'NIS2 Art.21.1 · DORA Art.8.1',       detail:'Rules missing name or description — required for audit trails',
+        flagIds:['NO_DESCRIPTION','NO_NAME'],
+        what:'NIS2 Art.21.1 mandates documented security policies. DORA Art.8.1 requires ICT risk management frameworks. Unnamed or undocumented rules cannot be reviewed, attributed, or audited — a direct compliance gap.',
+        rules: flagRules(['NO_DESCRIPTION','NO_NAME']) },
+      { id:'hyg',    label:'Operational Hygiene',       score:hygScore,    violations:hygViol,    ref:'NIS2 Art.21.2(a) · DORA Art.9.1',    detail:'Unused rules (zero hits) and disabled rules still in policy',
+        flagIds:['NO_HITS','DISABLED'],
+        what:'NIS2 Art.21.2(a) requires organizations to manage ICT risk on an ongoing basis. Rules that have never matched traffic or are disabled but not removed increase policy complexity, create confusion during incidents, and indicate absent change management.',
+        rules: flagRules(['NO_HITS','DISABLED']) },
+      { id:'log',    label:'Logging & Monitoring',      score:logScore,    violations:logViol,    ref:'NIS2 Art.21.2(g)',                    detail:'Anonymous / auto-named rules with no verified hit baseline',
+        flagIds:['NO_NAME','NO_HITS'],
+        what:'NIS2 Art.21.2(g) mandates incident detection through monitoring. Rules without names cannot be meaningfully referenced in logs, and rules with zero hits have no established traffic baseline — both undermine effective anomaly detection.',
+        rules: flagRules(['NO_NAME','NO_HITS']) },
+      { id:'enc',    label:'Encryption & Protocol',     score:encScore,    violations:encViol,    ref:'NIS2 Art.21.2(h)',                    detail:'Allow rules for cleartext protocols (Telnet, FTP, plain HTTP)',
+        flagIds:[],
+        what:'NIS2 Art.21.2(h) requires use of encryption and secure communication standards. Firewall rules explicitly permitting Telnet (TCP 23), FTP (TCP 21), or plain HTTP (TCP 80) as traffic flows validate insecure protocols in the environment.',
+        rules: rules.filter(r=>{const svc=((r.service||'')+' '+(r.services||'')).toLowerCase();return /\btelnet\b|\bftp\b|\bhttp\b(?!s)/.test(svc)&&r.action==='Accept';}) },
+      { id:'lp',     label:'Least Privilege',           score:lpScore,     violations:lpViol,     ref:'NIS2 Art.21.2(f) · CIS Control 12',  detail:'Any-any or any-src-any-dst allow rules granting unrestricted access',
+        flagIds:['ALL_ANY_ALLOW','BOTH_ANY_ALLOW'],
+        what:'The principle of least privilege (NIS2 Art.21.2(f), CIS Control 12.2) requires that network access is restricted to what is explicitly necessary. All-any and both-any rules grant blanket access and must be decomposed into specific allow statements.',
+        rules: flagRules(['ALL_ANY_ALLOW','BOTH_ANY_ALLOW']) },
+      { id:'sc',     label:'Third-Party / Supply Chain',score:scScore,     violations:scViol,     ref:'NIS2 Art.21.2(d)',                   detail:'Any-source allow rules that may expose services to uncontrolled external parties',
+        flagIds:['ANY_SRC_ALLOW'],
+        what:'NIS2 Art.21.2(d) requires managing security risks from third-party relationships and supply chain. Rules allowing traffic from any source expose services to unvetted external actors including suppliers and partners whose security posture is unknown.',
+        rules: flagRules(['ANY_SRC_ALLOW']) },
     ]
   };
 }
@@ -1053,6 +1483,7 @@ function switchTab(name) {
   document.getElementById('tbtn-'+name)?.classList.add('active');
   if (name==='findings') renderFindings();
   if (name==='livetraffic' && !LT.canvas) setTimeout(ltInitCanvas, 50);
+  if (name==='settings') updateIntegDots();
 }
 
 /* ── Severity strip ── */
@@ -1119,9 +1550,12 @@ function renderCompliance() {
   document.getElementById('score-grade').textContent = grade;
   document.getElementById('score-desc').textContent = desc;
 
-  document.getElementById('controls-grid').innerHTML = comp.controls.map(c => {
+  // Store controls on window for drill-down access
+  window._compControls = comp.controls;
+
+  document.getElementById('controls-grid').innerHTML = comp.controls.map((c,i) => {
     const col = scoreColor(c.score);
-    return `<div class="ctrl-card">
+    return `<div class="ctrl-card" onclick="openDrillDown(${i})">
       <div class="ctrl-head">
         <div class="ctrl-name">${c.label}</div>
         <div class="ctrl-score" style="color:${col}">${c.score}</div>
@@ -1129,8 +1563,72 @@ function renderCompliance() {
       <div class="ctrl-ref">${c.ref}</div>
       <div class="ctrl-bar"><div class="ctrl-bar-fill" style="width:${c.score}%;background:${col}"></div></div>
       <div class="ctrl-violations">${c.violations} violation${c.violations!==1?'s':''} · ${c.detail}</div>
+      <div class="ctrl-drill">▸ Click to see affected rules</div>
     </div>`;
   }).join('');
+}
+
+// ── Compliance drill-down ────────────────────────────────────────
+let _drillCtrl = null;
+
+function openDrillDown(idx) {
+  _drillCtrl = (window._compControls || [])[idx];
+  if (!_drillCtrl) return;
+  const c = _drillCtrl;
+  const col = scoreColor(c.score);
+
+  document.getElementById('cdm-title').innerHTML =
+    `<span style="color:${col}">${c.score}/100</span> — ${esc(c.label)}`;
+  document.getElementById('cdm-meta').textContent = c.ref;
+  document.getElementById('cdm-what').textContent = c.what || c.detail;
+
+  const ruleList = document.getElementById('cdm-rule-list');
+  if (!c.rules || !c.rules.length) {
+    ruleList.innerHTML = `<div class="cdm-empty">✓ No violations found for this control</div>`;
+    document.getElementById('cdm-footer-count').textContent = '0 violations';
+  } else {
+    ruleList.innerHTML = c.rules.map(r => {
+      const matchFlags = r.flags.filter(f => !c.flagIds?.length || c.flagIds.includes(f));
+      const allFlags   = r.flags;
+      return `<div class="cdm-rule" onclick="drillGoToRule(${r.rule_num})">
+        <div class="cdm-rule-num">#${r.rule_num}</div>
+        <div class="cdm-rule-body">
+          <div class="cdm-rule-name">${esc(r.name||'(unnamed)')}</div>
+          ${r.description ? `<div class="cdm-rule-detail">${esc(r.description)}</div>` : ''}
+          <div class="cdm-rule-flags">
+            ${allFlags.map(f => {
+              const risk = RISKS.find(x=>x.id===f);
+              const isMatch = !c.flagIds?.length || c.flagIds.includes(f);
+              return `<span class="tag ${risk?.sev||'LOW'}" style="${isMatch?'':'opacity:.4'}">${risk?.label||f}</span>`;
+            }).join('')}
+          </div>
+          <div class="cdm-rule-detail" style="margin-top:4px">
+            src: ${esc(r.src||'—')} → dst: ${esc(r.dst||'—')} · svc: ${esc(r.service||'—')} · action: <strong>${esc(r.action||'—')}</strong>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    document.getElementById('cdm-footer-count').textContent =
+      `${c.rules.length} violation${c.rules.length!==1?'s':''} · click a rule to jump to it`;
+  }
+
+  document.getElementById('cdm-overlay').style.display = 'flex';
+  document.body.style.overflow = 'hidden';
+}
+
+function closeDrillDown() {
+  document.getElementById('cdm-overlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function drillGoToRule(num) {
+  closeDrillDown();
+  goToRule(num);
+}
+
+function drillGoToFindings() {
+  closeDrillDown();
+  switchTab('findings');
 }
 
 /* ── Risk bars ── */
@@ -1321,14 +1819,12 @@ function goPage(n){pageNum=n;renderPage();}
 // NAVIGATION
 // ════════════════════════════════════════════════════════════════
 function backToConnect() {
-  document.getElementById('sec-connect').style.display='';
   document.getElementById('sec-layers').style.display='none';
   document.getElementById('sec-loading').style.display='none';
-  document.getElementById('dashboard').style.display='none';
+  switchTab('settings');
 }
 function backToLayers() {
   document.getElementById('sec-layers').style.display='';
-  document.getElementById('dashboard').style.display='none';
   document.getElementById('btn-load-rules').disabled=true;
   selectedLayer=null;
   document.querySelectorAll('.layer-item').forEach(el=>el.classList.remove('selected'));
@@ -1378,7 +1874,6 @@ function loadSample() {
   document.getElementById('btn-disconnect').style.display='';
   document.getElementById('active-layer-label').textContent='Sample Policy';
   document.getElementById('ts-label').textContent='Audited: '+new Date().toLocaleString();
-  document.getElementById('sec-connect').style.display='none';
   document.getElementById('sec-layers').style.display='none';
   document.getElementById('sec-loading').style.display='none';
   showDashboard();
@@ -2949,5 +3444,26 @@ function renderTopoDiagram(gw, container) {
   redrawTopo();
 }
 </script>
+
+<!-- Compliance drill-down modal (hidden by default) -->
+<div class="cdm-overlay" id="cdm-overlay" style="display:none" onclick="if(event.target===this)closeDrillDown()">
+  <div class="cdm-box">
+    <div class="cdm-header">
+      <div>
+        <div class="cdm-title" id="cdm-title"></div>
+        <div class="cdm-meta" id="cdm-meta"></div>
+      </div>
+      <button class="cdm-close" onclick="closeDrillDown()">✕ Close</button>
+    </div>
+    <div class="cdm-body">
+      <div class="cdm-what" id="cdm-what"></div>
+      <div class="cdm-rule-list" id="cdm-rule-list"></div>
+    </div>
+    <div class="cdm-footer">
+      <span id="cdm-footer-count"></span>
+      <button onclick="drillGoToFindings()">View in Findings ↗</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
