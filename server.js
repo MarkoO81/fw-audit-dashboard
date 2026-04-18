@@ -541,6 +541,7 @@ db.exec(`
     dst      TEXT NOT NULL,
     action   TEXT,
     service  TEXT,
+    app      TEXT DEFAULT '',
     bytes    INTEGER DEFAULT 0,
     allowed  INTEGER DEFAULT 0
   );
@@ -559,6 +560,7 @@ db.exec(`
     allow_c  INTEGER DEFAULT 0,
     drop_c   INTEGER DEFAULT 0,
     service  TEXT DEFAULT '',
+    app      TEXT DEFAULT '',
     last_ts  INTEGER DEFAULT 0,
     PRIMARY KEY(src, dst)
   );
@@ -567,7 +569,7 @@ db.exec(`
 `);
 
 // Prepared statements for hot path (UDP handler)
-const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,bytes,allowed) VALUES(?,?,?,?,?,?,?)`);
+const stmtInsertEvent  = db.prepare(`INSERT INTO events(ts,src,dst,action,service,app,bytes,allowed) VALUES(?,?,?,?,?,?,?,?)`);
 const stmtUpsertNode   = db.prepare(`
   INSERT INTO nodes(ip,allow_c,drop_c,bytes,last_ts) VALUES(?,?,?,?,?)
   ON CONFLICT(ip) DO UPDATE SET
@@ -577,21 +579,22 @@ const stmtUpsertNode   = db.prepare(`
     last_ts = MAX(last_ts, excluded.last_ts)
 `);
 const stmtUpsertEdge   = db.prepare(`
-  INSERT INTO edges(src,dst,allow_c,drop_c,service,last_ts) VALUES(?,?,?,?,?,?)
+  INSERT INTO edges(src,dst,allow_c,drop_c,service,app,last_ts) VALUES(?,?,?,?,?,?,?)
   ON CONFLICT(src,dst) DO UPDATE SET
     allow_c = allow_c + excluded.allow_c,
     drop_c  = drop_c  + excluded.drop_c,
     service = COALESCE(NULLIF(excluded.service,''), edges.service),
+    app     = COALESCE(NULLIF(excluded.app,''), edges.app),
     last_ts = MAX(last_ts, excluded.last_ts)
 `);
 
 // Wrap the three writes in a single transaction for speed
 const insertTraffic = db.transaction((ev, allowed) => {
   const ts = ev.ts;
-  stmtInsertEvent.run(ts, ev.src, ev.dst, ev.action, ev.service||'', ev.bytes||0, allowed?1:0);
+  stmtInsertEvent.run(ts, ev.src, ev.dst, ev.action, ev.service||'', ev.app||'', ev.bytes||0, allowed?1:0);
   stmtUpsertNode.run(ev.src, allowed?1:0, allowed?0:1, ev.bytes||0, ts);
   stmtUpsertNode.run(ev.dst, 0, 0, 0, ts);
-  stmtUpsertEdge.run(ev.src, ev.dst, allowed?1:0, allowed?0:1, ev.service||'', ts);
+  stmtUpsertEdge.run(ev.src, ev.dst, allowed?1:0, allowed?0:1, ev.service||'', ev.app||'', ts);
 });
 
 // ─── syslog receiver (live traffic) ──────────────────────────────────────────
@@ -639,31 +642,57 @@ function parseSyslogEvent(raw) {
   const dst = kv.dst || kv.xlatedst;
   if (!src || !dst || !IP_RE.test(src) || !IP_RE.test(dst)) return null;
 
+  // app: APPI blade identification (rich name like "ChatGPT", "YouTube")
+  // service: protocol/port-level name (https, dns, smtp)
+  const app     = kv.appi_name || kv.app_name || kv.application || kv.app || '';
+  const service = kv.service || kv.proto || '';
+
   return {
     ts:      Date.now(),
     src, dst,
     action:  kv.action || 'unknown',
-    service: kv.service || kv.app || kv.appi_name || kv.proto || '',
+    service: service || app,  // fallback so service is never empty if we have app
+    app,
     bytes:   parseInt(kv.bytes) || 0,
   };
 }
+
+// Add app column to existing DB if upgrading from older schema (idempotent)
+try { db.exec(`ALTER TABLE events ADD COLUMN app TEXT DEFAULT ''`); } catch {}
+try { db.exec(`ALTER TABLE edges  ADD COLUMN app TEXT DEFAULT ''`); } catch {}
 
 function buildSnapshot(windowSec = 3600) {
   const cutoff = windowSec ? Date.now() - windowSec * 1000 : 0;
   const where  = cutoff ? 'WHERE last_ts >= ?' : '';
   const args   = cutoff ? [cutoff] : [];
 
-  const nodes = db.prepare(`SELECT ip, allow_c, drop_c, bytes, last_ts FROM nodes ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 500`).all(...args);
-  const edges = db.prepare(`SELECT src, dst, allow_c, drop_c, service, last_ts FROM edges ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 2000`).all(...args);
-  const recent = db.prepare(`SELECT ts,src,dst,action,service,bytes FROM events ORDER BY ts DESC LIMIT 200`).all();
+  const nodes  = db.prepare(`SELECT ip, allow_c, drop_c, bytes, last_ts FROM nodes ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 500`).all(...args);
+  const edges  = db.prepare(`SELECT src, dst, allow_c, drop_c, service, app, last_ts FROM edges ${where} ORDER BY (allow_c+drop_c) DESC LIMIT 2000`).all(...args);
+  const recent = db.prepare(`SELECT ts,src,dst,action,service,app,bytes FROM events ORDER BY ts DESC LIMIT 200`).all();
   const total  = db.prepare(`SELECT COUNT(*) as c FROM events`).get().c;
+
+  // Top applications: aggregate by app (fall back to service), count events + bytes
+  const topApps = db.prepare(`
+    SELECT
+      COALESCE(NULLIF(app,''), service, 'unknown') AS name,
+      COUNT(*) AS events,
+      SUM(bytes) AS bytes,
+      SUM(allowed) AS allow_c,
+      COUNT(*) - SUM(allowed) AS drop_c
+    FROM events
+    ${cutoff ? 'WHERE ts >= ?' : ''}
+    GROUP BY name
+    ORDER BY events DESC
+    LIMIT 20
+  `).all(...args);
 
   return {
     type: 'snapshot', ts: Date.now(),
     totalEvents: total,
-    nodes: nodes.map(n => ({ ip:n.ip, allow:n.allow_c, drop:n.drop_c, bytes:n.bytes, lastSeen:n.last_ts })),
-    edges: edges.map(e => ({ src:e.src, dst:e.dst, allow:e.allow_c, drop:e.drop_c, service:e.service, lastSeen:e.last_ts })),
+    nodes:       nodes.map(n => ({ ip:n.ip, allow:n.allow_c, drop:n.drop_c, bytes:n.bytes, lastSeen:n.last_ts })),
+    edges:       edges.map(e => ({ src:e.src, dst:e.dst, allow:e.allow_c, drop:e.drop_c, service:e.service, app:e.app, lastSeen:e.last_ts })),
     recentEvents: recent,
+    topApps,
   };
 }
 

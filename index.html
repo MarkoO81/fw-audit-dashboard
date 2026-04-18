@@ -880,6 +880,10 @@
               <div id="lt-ai-list"><span style="color:var(--text-dim);font-size:11px">No AI traffic detected…</span></div>
               <div style="margin-top:8px;font-size:10px;color:var(--text-dim);line-height:1.4">IP-prefix based · domain matching with HTTPS inspection</div>
             </div>
+            <div class="lt-talkers" id="lt-top-apps">
+              <h4>Top Applications</h4>
+              <div id="lt-apps-list"><span style="color:var(--text-dim);font-size:11px">No data yet…</span></div>
+            </div>
             <div class="lt-talkers" id="lt-talkers">
               <h4>Top Talkers</h4>
               <div id="lt-talkers-list"><span style="color:var(--text-dim);font-size:11px">No data yet…</span></div>
@@ -2096,6 +2100,7 @@ const LT = {
   aiFilter: false,     // show only AI-related traffic
   aiFilterId: null,    // null = all AI providers, or specific provider id
   aiLogos: {},         // id → HTMLImageElement (preloaded from SVG)
+  topApps: [],         // [{name, events, bytes, allow_c, drop_c}]
 };
 
 const RFC1918 = [
@@ -2415,6 +2420,7 @@ function ltApplySnapshot(snap) {
   LT.edges = newEdges;
 
   LT.eventLog = snap.recentEvents || [];
+  LT.topApps  = snap.topApps || [];
   LT.totalEvents = snap.totalEvents || 0;
   LT.allowCount = snap.nodes?.reduce((s,n)=>s+(n.allow||0),0) || 0;
   LT.dropCount  = snap.nodes?.reduce((s,n)=>s+(n.drop||0),0) || 0;
@@ -2423,6 +2429,7 @@ function ltApplySnapshot(snap) {
   ltStartCountdown();
   ltUpdateStats();
   ltUpdateEventLog();
+  ltUpdateTopApps();
   ltUpdateTopTalkers();
   ltUpdateAiPanel();
   if (Object.keys(LT.nodes).length) {
@@ -2459,11 +2466,12 @@ function ltApplyWindow() { ltUpdateStats(); }
 
 function ltClear() {
   fetch('/api/syslog/clear', { method:'POST' }).catch(()=>{});
-  LT.nodes={}; LT.edges={}; LT.eventLog=[];
+  LT.nodes={}; LT.edges={}; LT.eventLog=[]; LT.topApps=[];
   LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.totalBytes=0;
   LT.epsWindow=[]; LT.particles={};
   ltUpdateStats();
   ltUpdateEventLog();
+  ltUpdateTopApps();
   ltUpdateTopTalkers();
   ltUpdateAiPanel();
   document.getElementById('lt-overlay')?.classList.remove('hidden');
@@ -2503,7 +2511,8 @@ function ltRenderEventRows(evs) {
       <span class="lt-ev-src">${esc(ev.src)}</span>
       <span style="color:var(--text-dim)">→</span>
       <span class="lt-ev-dst">${esc(ev.dst)}</span>
-      <span class="lt-ev-svc">${esc(ev.service||'')}</span>
+      <span class="lt-ev-svc">${esc(ev.app && ev.app !== ev.service ? ev.app : (ev.service||''))}</span>
+      ${ev.app && ev.app !== ev.service && ev.service ? `<span style="color:var(--text-dim);font-size:10px">${esc(ev.service)}</span>` : ''}
       ${ev.bytes?`<span style="color:var(--text-dim);font-size:10px">${ltFmtBytes(ev.bytes)}</span>`:''}
     </div>`;
   }).join('');
@@ -2521,7 +2530,7 @@ function ltFilterLog() {
   const log = document.getElementById('lt-event-log');
   if (!log) return;
   const evs = q
-    ? LT.eventLog.filter(ev=>(ev.src+ev.dst+(ev.service||'')+(ev.action||'')).toLowerCase().includes(q))
+    ? LT.eventLog.filter(ev=>(ev.src+ev.dst+(ev.service||'')+(ev.app||'')+(ev.action||'')).toLowerCase().includes(q))
     : LT.eventLog;
   log.innerHTML = ltRenderEventRows(evs.slice(0,80));
 }
@@ -2998,6 +3007,29 @@ function ltAnimLoop() {
 }
 
 function ltRedraw() { /* next frame picks it up */ }
+
+// ── Top applications panel ────────────────────────────────────
+function ltUpdateTopApps() {
+  const el = document.getElementById('lt-apps-list');
+  if (!el) return;
+  const apps = LT.topApps || [];
+  if (!apps.length) {
+    el.innerHTML = '<span style="color:var(--text-dim);font-size:11px">No data yet…</span>';
+    return;
+  }
+  const maxEv = Math.max(1, ...apps.map(a => a.events));
+  el.innerHTML = apps.slice(0, 10).map(a => {
+    const pct = Math.round((a.events / maxEv) * 100);
+    const dropRate = a.events ? (a.drop_c / a.events) : 0;
+    const barColor = dropRate > 0.5 ? '#ff4d4d' : dropRate > 0.2 ? '#f5c842' : '#4dff91';
+    const label = a.name === 'unknown' ? '<span style="color:var(--text-dim);font-style:italic">unknown</span>' : esc(a.name);
+    return `<div class="lt-talker-row" title="${esc(a.name)}: ${a.events} events · ↑${a.allow_c} ✗${a.drop_c}${a.bytes?' · '+ltFmtBytes(a.bytes):''}">
+      <div class="lt-talker-ip" style="font-family:inherit;font-size:11px">${label}</div>
+      <div class="lt-talker-bar-wrap"><div class="lt-talker-bar" style="width:${pct}%;background:${barColor}"></div></div>
+      <span style="color:var(--text-dim);font-size:10px;width:30px;text-align:right;flex-shrink:0">${a.events}</span>
+    </div>`;
+  }).join('');
+}
 
 // ── Top talkers panel ─────────────────────────────────────────
 function ltUpdateTopTalkers() {
