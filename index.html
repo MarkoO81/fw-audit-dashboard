@@ -1747,10 +1747,15 @@ function applyFilters() {
     if (q) { const h=[r.name,r.src,r.dst,r.service,r.action,r.comment,r.src_zone,r.dst_zone,r.last_hit].join(' ').toLowerCase(); if (!h.includes(q)) return false; }
     return true;
   });
-  if (sortCol) filteredRules.sort((a,b)=>{
-    let av=a[sortCol]??'', bv=b[sortCol]??'';
-    if (sortCol==='hits'){av=Number(av)||0;bv=Number(bv)||0;}
-    return av<bv?-sortDir:av>bv?sortDir:0;
+  filteredRules.sort((a,b)=>{
+    if (sortCol) {
+      let av=a[sortCol]??'', bv=b[sortCol]??'';
+      if (sortCol==='hits'){av=Number(av)||0;bv=Number(bv)||0;}
+      const r=av<bv?-sortDir:av>bv?sortDir:0;
+      if (r!==0) return r;
+    }
+    // always break ties (and default sort) by rule_num ascending
+    return (Number(a.rule_num)||0)-(Number(b.rule_num)||0);
   });
   document.getElementById('visible-count').textContent=filteredRules.length;
   document.getElementById('total-count').textContent=auditedRules.length;
