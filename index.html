@@ -2671,9 +2671,22 @@ function ltDraw() {
   }
   const dimming = LT.hovNode != null;
 
-  // AI filter sets
+  // AI filter sets — include AI provider nodes AND their conversation partners
   const aiMode = LT.aiFilter;
-  const aiNodeSet = aiMode ? new Set(nodes.filter(n=>nodeIsAi(n)).map(n=>n.ip)) : null;
+  const aiNodeSet = (() => {
+    if (!aiMode) return null;
+    // Step 1: AI destination IPs
+    const aiIps = new Set(nodes.filter(n => nodeIsAi(n)).map(n => n.ip));
+    // Step 2: also include every node that has an edge to/from an AI IP
+    const set = new Set(aiIps);
+    for (const e of edges) {
+      if (aiIps.has(e.src) || aiIps.has(e.dst)) {
+        set.add(e.src);
+        set.add(e.dst);
+      }
+    }
+    return set;
+  })();
 
   ctx.save();
   ctx.translate(LT.camX, LT.camY);
