@@ -2561,6 +2561,29 @@ function ltFilterLog() {
   log.innerHTML = ltRenderEventRows(evs.slice(0,80));
 }
 
+// Click on a node → filter graph highlight + event log to that IP
+// Click same IP again → clear the filter
+function ltDrillDownNode(ip) {
+  const searchEl = document.getElementById('lt-search');
+  const logEl    = document.getElementById('lt-log-filter');
+
+  const already = LT.searchQuery === ip;
+  const newQ = already ? '' : ip;
+
+  LT.searchQuery = newQ;
+  if (searchEl) searchEl.value = newQ;
+  if (logEl)    logEl.value   = newQ;
+
+  // Filter event log to show only events involving this IP
+  const log = document.getElementById('lt-event-log');
+  if (log) {
+    const evs = newQ
+      ? LT.eventLog.filter(ev => ev.src === newQ || ev.dst === newQ)
+      : LT.eventLog;
+    log.innerHTML = ltRenderEventRows(evs.slice(0, 80));
+  }
+}
+
 // ── Canvas rendering ──────────────────────────────────────────
 function ltInitCanvas() {
   LT.canvas = document.getElementById('lt-canvas');
@@ -3101,6 +3124,7 @@ function ltInitEvents() {
     const {x,y}=ltMousePos(e);
     LT.dragNode = ltHitNode(x,y);
     LT.drag=true; LT.dragSX=e.clientX-LT.camX; LT.dragSY=e.clientY-LT.camY;
+    LT._clickOrigin = { x: e.clientX, y: e.clientY };
   });
   c.addEventListener('mousemove', e => {
     if (LT.drag && LT.dragNode) {
@@ -3114,9 +3138,18 @@ function ltInitEvents() {
     LT.hovNode=ltHitNode(x,y);
     if (LT.hovNode!==prev) ltShowTooltip(e,LT.hovNode);
   });
-  c.addEventListener('mouseup', ()=>{
-    if (LT.dragNode) LT.dragNode.pinned = true;   // pin on drop
-    LT.drag=false; LT.dragNode=null;
+  c.addEventListener('mouseup', e => {
+    const wasDrag = LT._clickOrigin &&
+      (Math.abs(e.clientX - LT._clickOrigin.x) > 4 || Math.abs(e.clientY - LT._clickOrigin.y) > 4);
+    if (LT.dragNode) {
+      if (wasDrag) {
+        LT.dragNode.pinned = true;   // pin on drop
+      } else {
+        // Click (no significant movement) → drill down to this IP
+        ltDrillDownNode(LT.dragNode.ip);
+      }
+    }
+    LT.drag=false; LT.dragNode=null; LT._clickOrigin=null;
   });
   c.addEventListener('mouseleave', ()=>{ LT.drag=false; LT.dragNode=null; LT.hovNode=null; ltHideTooltip(); });
   c.addEventListener('dblclick', e => {             // double-click → unpin / re-simulate
