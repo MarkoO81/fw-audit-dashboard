@@ -2426,6 +2426,12 @@ function ltApplySnapshot(snap) {
   LT.dropCount  = snap.nodes?.reduce((s,n)=>s+(n.drop||0),0) || 0;
   LT.totalBytes = snap.nodes?.reduce((s,n)=>s+(n.bytes||0),0) || 0;
 
+  // EPS sliding window — keep 60s of samples, compute rate from oldest to newest
+  const epsSample = { ts: now, total: LT.totalEvents };
+  LT.epsWindow.push(epsSample);
+  const cutoffEps = now - 60_000;
+  while (LT.epsWindow.length > 1 && LT.epsWindow[0].ts < cutoffEps) LT.epsWindow.shift();
+
   ltStartCountdown();
   ltUpdateStats();
   ltUpdateEventLog();
@@ -2469,6 +2475,8 @@ function ltClear() {
   LT.nodes={}; LT.edges={}; LT.eventLog=[]; LT.topApps=[];
   LT.totalEvents=0; LT.allowCount=0; LT.dropCount=0; LT.totalBytes=0;
   LT.epsWindow=[]; LT.particles={};
+  const epsEl = document.getElementById('lt-s-eps');
+  if (epsEl) { epsEl.textContent='—'; epsEl.style.color=''; }
   ltUpdateStats();
   ltUpdateEventLog();
   ltUpdateTopApps();
@@ -2495,7 +2503,25 @@ function ltUpdateStats() {
   document.getElementById('lt-s-allow').textContent = LT.allowCount.toLocaleString();
   document.getElementById('lt-s-drop').textContent  = LT.dropCount.toLocaleString();
   document.getElementById('lt-s-bytes').textContent = ltFmtBytes(LT.totalBytes);
-  document.getElementById('lt-s-eps').textContent = '—';
+
+  // EPS — compute from sliding window oldest→newest sample
+  const epsEl = document.getElementById('lt-s-eps');
+  if (epsEl) {
+    const w = LT.epsWindow;
+    if (w.length >= 2) {
+      const oldest = w[0], newest = w[w.length - 1];
+      const elapsedSec = (newest.ts - oldest.ts) / 1000;
+      const eps = elapsedSec > 0 ? (newest.total - oldest.total) / elapsedSec : 0;
+      const epsRounded = eps < 10 ? eps.toFixed(1) : Math.round(eps);
+      epsEl.textContent = epsRounded;
+      // Color: green < 1k, yellow < 5k, red ≥ 5k
+      epsEl.style.color = eps >= 5000 ? 'var(--critical)' : eps >= 1000 ? 'var(--warn)' : 'var(--ok)';
+    } else {
+      epsEl.textContent = '—';
+      epsEl.style.color = '';
+    }
+  }
+
   document.getElementById('tb-livetraffic').textContent = LT.listening ? '●' : '○';
   document.getElementById('tb-livetraffic').style.color = LT.listening ? 'var(--ok)' : '';
 }
