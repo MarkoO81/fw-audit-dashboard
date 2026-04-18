@@ -1119,8 +1119,8 @@
 // PLATFORM LOGIN
 // ════════════════════════════════════════════════════════════════
 (function initWelcome() {
-  // Check if already logged in this session
-  if (sessionStorage.getItem('aiverto_logged_in') === '1') {
+  // Check if already logged in (persists across page reloads)
+  if (localStorage.getItem('aiverto_logged_in') === '1') {
     document.getElementById('welcome-overlay').style.display = 'none';
     showMainApp();
   }
@@ -1143,7 +1143,7 @@ function doWelcomeLogin(e) {
   }
 
   alert.textContent = '';
-  sessionStorage.setItem('aiverto_logged_in', '1');
+  localStorage.setItem('aiverto_logged_in', '1');
   const overlay = document.getElementById('welcome-overlay');
   overlay.classList.add('fade-out');
   setTimeout(() => { overlay.style.display = 'none'; showMainApp(); }, 380);
@@ -1157,6 +1157,12 @@ function showMainApp() {
   const saved = JSON.parse(localStorage.getItem('aiverto_creds') || '{"user":"admin"}');
   const el = document.getElementById('st-platform-user');
   if (el) el.value = saved.user || 'admin';
+  // Restore CP connection form fields (password excluded for security)
+  const cp = JSON.parse(localStorage.getItem('cp_conn') || '{}');
+  if (cp.server) { const e=document.getElementById('cp-server'); if(e) e.value=cp.server; }
+  if (cp.port)   { const e=document.getElementById('cp-port');   if(e) e.value=cp.port; }
+  if (cp.domain) { const e=document.getElementById('cp-domain'); if(e) e.value=cp.domain; }
+  if (cp.user)   { const e=document.getElementById('cp-user');   if(e) e.value=cp.user; }
 }
 
 function savePlatformCreds() {
@@ -1174,7 +1180,7 @@ function savePlatformCreds() {
 }
 
 function platformLogout() {
-  sessionStorage.removeItem('aiverto_logged_in');
+  localStorage.removeItem('aiverto_logged_in');
   location.reload();
 }
 
@@ -1263,6 +1269,8 @@ async function doLogin() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.error||`HTTP ${r.status}`);
     session = {sid:data.sid, server, port};
+    // Persist non-sensitive CP fields so they survive page reload
+    localStorage.setItem('cp_conn', JSON.stringify({server, port, domain, user:username}));
     setConnected(server);
     await loadLayers();
   } catch(e) { showAlert('alert-connect', e.message); }
